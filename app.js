@@ -93,15 +93,16 @@ function setTheme(theme){document.documentElement.dataset.theme=theme;const dark
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
 function colorize(line) {
-  let s = escapeHtml(line);
-  const comment = s.indexOf('//');
-  if (comment >= 0) return colorize(line.slice(0, comment)) + `<span class="tok-comment">${escapeHtml(line.slice(comment))}</span>`;
-  s = s.replace(/(&quot;.*?&quot;)/g, '<span class="tok-string">$1</span>')
-    .replace(/\b(class|public|static|void|new|return|this|private|int|String)\b/g, '<span class="tok-key">$1</span>')
-    .replace(/\b([A-Z][A-Za-z0-9_]*)\b/g, '<span class="tok-type">$1</span>')
-    .replace(/\b(\d+)\b/g, '<span class="tok-num">$1</span>')
-    .replace(/\.([a-zA-Z_]\w*)\(/g, '.<span class="tok-call">$1</span>(');
-  return s || ' ';
+  const tokenRe = /(\/\/.*$)|("(?:\\.|[^"\\])*")|\b(class|public|static|void|new|return|this|private|protected|extends|int|boolean|double|long|char|String)\b|\b([A-Z][A-Za-z0-9_]*)\b|\b(\d+(?:\.\d+)?)\b|\.([a-zA-Z_]\w*)(?=\()/g;
+  let html = '', cursor = 0, match;
+  while ((match = tokenRe.exec(line))) {
+    html += escapeHtml(line.slice(cursor, match.index));
+    const css = match[1] ? 'tok-comment' : match[2] ? 'tok-string' : match[3] ? 'tok-key' : match[4] ? 'tok-type' : match[5] ? 'tok-num' : 'tok-call';
+    html += `<span class="${css}">${escapeHtml(match[0])}</span>`;
+    cursor = match.index + match[0].length;
+    if (match[1]) break;
+  }
+  return html + escapeHtml(line.slice(cursor)) || ' ';
 }
 function renderEditor(activeLine = -1) {
   const lines = editor.value.split('\n');
@@ -188,8 +189,17 @@ function renderState() {
   const objs=Object.values(e.objects);$('heapArea').innerHTML=(objs.length?objs.map((o,i)=>`<div class="object-card ${e.changed===o.id?'changed':''}" id="object-${o.id}" style="--object-color:${palette[(o.id-1)%palette.length]}"><div class="object-header"><span>${escapeHtml(o.className)}</span><span class="object-id">OBJECT #${o.id}</span></div><div class="object-body">${Object.entries(o.fields).map(([k,v],j)=>`<div class="field-row"><span class="field-name">${escapeHtml(k)}</span><span class="field-value">${formatValue(v,`ref-field-${o.id}-${j}`)}</span></div>`).join('')}</div></div>`).join(''):'<div class="empty-state compact"><div class="empty-symbol">○</div><p>No objects exist yet.</p></div>');
   $('consoleOutput').innerHTML=e.console.length?e.console.map(x=>`<div class="console-line">${escapeHtml(x)}</div>`).join(''):'<span class="console-muted">Output will appear here…</span>';
   $('storyList').innerHTML=events.map((x,i)=>`<div class="story-item ${i<=step?'reached':''} ${i===step?'active':''}"><span class="story-index">${i+1}</span><div class="story-copy"><strong>${escapeHtml(x.title)}</strong>${escapeHtml(x.text)}</div></div>`).join('');
-  const active=$('.code-highlight .line.active');if(active)active.scrollIntoView({block:'center'});
+  scrollEditorToLine(e.line);
   $('prevBtn').disabled=step===0;$('nextBtn').disabled=step===events.length-1;requestAnimationFrame(drawReferenceArrows);
+}
+function scrollEditorToLine(line){
+  if(!line)return;
+  const lineHeight=22,padding=16,target=(line-1)*lineHeight+padding;
+  const visibleTop=editor.scrollTop,visibleBottom=visibleTop+editor.clientHeight;
+  if(target<visibleTop+lineHeight||target>visibleBottom-lineHeight*2){
+    editor.scrollTop=Math.max(0,target-editor.clientHeight/2+lineHeight/2);
+    syncScroll();
+  }
 }
 function drawReferenceArrows(){
   const svg=$('memoryArrows'),root=$('memoryView');if(!svg||root.hidden)return;const base=root.getBoundingClientRect();
@@ -207,6 +217,10 @@ function showToast(msg,error=false){const t=$('toast');t.textContent=msg;t.style
 function setExample(key){stop();events=[];step=0;editor.value=examples[key];savedCode=editor.value;renderEditor();$('dirtyDot').classList.remove('visible');$('stackArea').innerHTML='<div class="empty-state compact"><div class="empty-symbol">{ }</div><p>Run the code to see method frames appear here.</p></div>';$('heapArea').innerHTML='<div class="empty-state compact"><div class="empty-symbol">○</div><p>Created objects will appear here.</p></div>';}
 
 editor.addEventListener('input',()=>{renderEditor();$('dirtyDot').classList.toggle('visible',editor.value!==savedCode)});editor.addEventListener('scroll',syncScroll);editor.addEventListener('keydown',e=>{if(e.key==='Tab'){e.preventDefault();const a=editor.selectionStart,b=editor.selectionEnd;editor.setRangeText('    ',a,b,'end');renderEditor()}});
+document.querySelector('.editor-wrap').addEventListener('wheel',e=>{
+  if(e.ctrlKey)return;
+  if(e.target!==editor){e.preventDefault();editor.scrollTop+=e.deltaY;editor.scrollLeft+=e.deltaX;syncScroll()}
+},{passive:false});
 $('runBtn').onclick=run;$('resetBtn').onclick=()=>setExample($('exampleSelect').value);$('exampleSelect').onchange=e=>setExample(e.target.value);$('prevBtn').onclick=prev;$('nextBtn').onclick=next;$('playBtn').onclick=play;$('timeline').oninput=e=>{stop();step=Number(e.target.value);renderState()};$('speedSelect').onchange=()=>{if(timer){stop();play()}};$('clearConsoleBtn').onclick=()=>$('consoleOutput').innerHTML='<span class="console-muted">Console cleared.</span>';
 $('themeBtn').onclick=()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
 document.querySelectorAll('.view-tab').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.view-tab').forEach(b=>b.classList.toggle('active',b===btn));$('memoryView').hidden=btn.dataset.view!=='memory';$('storyView').hidden=btn.dataset.view!=='story'});

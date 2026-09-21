@@ -6,8 +6,8 @@
 }
 [data-theme="dark"] { --ink:#e8edf7; --muted:#98a6bd; --line:#303b50; --paper:#111827; --white:#192235; --code:#dce5f5; }
 * { box-sizing: border-box; }
-html, body { height: 100%; }
-body { margin: 0; color: var(--ink); background: var(--paper); font-family: var(--sans); overflow: hidden; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body { color: var(--ink); background: var(--paper); font-family: var(--sans); }
 button, select, textarea { font: inherit; }
 button, select { cursor: pointer; }
 .topbar { height: 72px; display: grid; grid-template-columns: 300px 1fr auto; align-items: center; gap: 24px; padding: 0 22px; background: var(--white); border-bottom: 1px solid var(--line); }
@@ -39,14 +39,15 @@ button { border: 0; }
 .dirty-dot.visible { opacity: 1; }
 select { color: var(--ink); background: #f3f5f8; border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; font-size: 11px; font-weight: 700; outline: none; }
 .editor-panel { display: grid; grid-template-rows: 48px 1fr 28px; }
-.editor-wrap { position: relative; display: grid; grid-template-columns: 44px 1fr; min-height: 0; background: #fbfcfd; overflow: hidden; }
+.editor-wrap { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr); min-width: 0; min-height: 0; height: 100%; background: #fbfcfd; overflow: hidden; overscroll-behavior: contain; }
 .line-numbers { padding-top: 16px; color: #b0bac8; background: #f5f7fa; border-right: 1px solid #edf0f4; font: 12px/22px var(--mono); text-align: right; user-select: none; }
 .line-numbers div { padding-right: 11px; height: 22px; }
 .line-numbers div.active { color: white; background: var(--coral); font-weight: 700; }
-#codeEditor, .code-highlight { grid-column: 2; grid-row: 1; margin: 0; padding: 16px 18px; border: 0; white-space: pre; overflow: auto; font: 12px/22px var(--mono); tab-size: 4; }
+#codeEditor, .code-highlight { grid-column: 2; grid-row: 1; width: 100%; height: 100%; min-width: 0; min-height: 0; margin: 0; padding: 16px 18px; border: 0; white-space: pre; overflow: auto; overscroll-behavior: contain; font: 12px/22px var(--mono); tab-size: 4; }
 #codeEditor { z-index: 2; resize: none; outline: none; background: transparent; color: transparent; caret-color: var(--ink); }
 #codeEditor::selection { background: #f46f5538; color: transparent; }
-.code-highlight { z-index: 1; pointer-events: none; color: var(--code); }
+.code-highlight { z-index: 1; pointer-events: none; scrollbar-width: none; color: var(--code); }
+.code-highlight::-webkit-scrollbar { display: none; }
 .code-highlight .line { display: block; min-height: 22px; margin: 0 -18px; padding: 0 18px; }
 .code-highlight .line.active { background: #fff0ec; box-shadow: inset 3px 0 var(--coral); }
 .tok-key { color: #7456b7; font-weight: 500; }.tok-type { color: #197e91; }.tok-string { color: #bc653e; }.tok-comment { color: #8b9aab; font-style: italic; }.tok-num { color: #2672c9; }.tok-call { color: #3d63bd; }
