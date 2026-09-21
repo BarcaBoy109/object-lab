@@ -1,6 +1,6 @@
 # Contributing to ObjectLab
 
-Thanks for helping improve ObjectLab, an educational Java OOP visualizer.
+Thanks for helping improve ObjectLab, an open source, educational Java OOP visualizer.
 
 ## Getting started
 
