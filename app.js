@@ -1,4 +1,96 @@
 const examples = {
+  blank: '',
+  inheritance: `class Animal {
+    String name;
+
+    Animal(String name) {
+        this.name = name;
+    }
+
+    void speak() {
+        System.out.println(name + " makes a sound");
+    }
+
+    void introduce() {
+        System.out.println("Meet " + name);
+    }
+}
+
+class Dog extends Animal {
+    Dog(String name) {
+        super(name);
+    }
+
+    @Override
+    void speak() {
+        System.out.println(name + " says woof!");
+    }
+}
+
+class Main {
+    public static void main(String[] args) {
+        Animal pet = new Dog("Mochi");
+        pet.introduce();
+        pet.speak();
+    }
+}`,
+  overloading: `class Counter {
+    int count;
+
+    Counter() {
+        this(0);
+    }
+
+    Counter(int start) {
+        count = start;
+    }
+
+    void add(int amount) {
+        count += amount;
+    }
+
+    void add(String label) {
+        System.out.println(label + count);
+    }
+
+    void add(int amount, int times) {
+        count += amount * times;
+    }
+}
+
+class Main {
+    public static void main(String[] args) {
+        Counter counter = new Counter();
+        Counter other = new Counter(10);
+        counter.add(2);
+        counter.add(3, 4);
+        counter.add("Total: ");
+        other.add("Other: ");
+    }
+}`,
+  loops: `class Counter {
+    int count;
+
+    void increment() {
+        count++;
+    }
+}
+
+class Main {
+    public static void main(String[] args) {
+        Counter counter = new Counter();
+        for (int i = 0; i < 3; i++) {
+            counter.increment();
+        }
+        while (counter.count < 5) {
+            counter.increment();
+        }
+        do {
+            counter.count--;
+        } while (counter.count > 3);
+        System.out.println(counter.count);
+    }
+}`,
   bank: `class BankAccount {
     String owner;
     int balance;
@@ -93,7 +185,7 @@ function setTheme(theme){document.documentElement.dataset.theme=theme;const dark
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
 function colorize(line) {
-  const tokenRe = /(\/\/.*$)|("(?:\\.|[^"\\])*")|\b(class|public|static|void|new|return|this|private|protected|extends|int|boolean|double|long|char|String)\b|\b([A-Z][A-Za-z0-9_]*)\b|\b(\d+(?:\.\d+)?)\b|\.([a-zA-Z_]\w*)(?=\()/g;
+  const tokenRe = /(\/\/.*$)|("(?:\\.|[^"\\])*")|\b(class|public|static|void|new|return|this|super|private|protected|extends|int|boolean|double|long|char|String|for|while|do|if|else|break|continue|true|false|null)\b|\b([A-Z][A-Za-z0-9_]*)\b|\b(\d+(?:\.\d+)?)\b|\.([a-zA-Z_]\w*)(?=\()/g;
   let html = '', cursor = 0, match;
   while ((match = tokenRe.exec(line))) {
     html += escapeHtml(line.slice(cursor, match.index));
@@ -108,95 +200,19 @@ function renderEditor(activeLine = -1) {
   const lines = editor.value.split('\n');
   numbers.innerHTML = lines.map((_, i) => `<div class="${i + 1 === activeLine ? 'active' : ''}">${i + 1}</div>`).join('');
   highlight.innerHTML = lines.map((l, i) => `<span class="line ${i + 1 === activeLine ? 'active' : ''}">${colorize(l)}</span>`).join('');
+  syncScroll();
 }
-function syncScroll() { highlight.scrollTop = editor.scrollTop; highlight.scrollLeft = editor.scrollLeft; numbers.scrollTop = editor.scrollTop; }
-
-function val(raw, env = {}, fields = {}) {
-  raw = raw.trim();
-  if (raw === 'null') return null;
-  if (raw === 'true') return true;
-  if (raw === 'false') return false;
-  if (/^".*"$/.test(raw)) return raw.slice(1, -1);
-  if (/^-?\d+$/.test(raw)) return Number(raw);
-  const add = raw.match(/^(.+?)\s*\+\s*(.+)$/);
-  if (add) return val(add[1], env, fields) + val(add[2], env, fields);
-  return raw in env ? env[raw] : raw in fields ? fields[raw] : raw;
-}
-function splitArgs(s) { return s ? (s.match(/(?:[^,"']|"[^"]*")+/g) || []).map(x => x.trim()) : []; }
-
-function compile(source) {
-  const lines = source.split('\n');
-  const modifiers = '(?:(?:public|private|protected|abstract|final|static)\\s+)*';
-  const classRe = new RegExp('^\\s*' + modifiers + 'class\\s+(\\w+)(?:\\s+extends\\s+(\\w+))?');
-  const fieldRe = /^\s*(?:(?:public|private|protected|static|final|transient|volatile)\s+)*([A-Z]\w*|int|boolean|double|long|char)\s+(\w+)(?:\s*=\s*[^;]+)?\s*;/;
-  const methodRe = /^\s*(?:(?:public|private|protected|static|final|abstract|synchronized)\s+)*(?:void|int|String|boolean|double|long|char|\w+(?:\[\])?)\s+(\w+)\s*\(([^)]*)\)\s*\{/;
-  const classes = {};
-  let cls = null, method = null, depth = 0;
-  lines.forEach((text, idx) => {
-    const c = text.match(classRe);
-    if (c) { cls = { name:c[1], parent:c[2] || null, fields:[], methods:{} }; classes[c[1]] = cls; method = null; depth = 0; }
-    if (!cls) return;
-    const before = depth; depth += (text.match(/{/g)||[]).length - (text.match(/}/g)||[]).length;
-    const f = text.match(fieldRe); if (f && !method && depth === 1) cls.fields.push({type:f[1], name:f[2]});
-    const m = text.match(methodRe);
-    const ctor = text.match(new RegExp('^\\s*' + modifiers + cls.name + '\\s*\\(([^)]*)\\)\\s*\\{'));
-    if ((m || ctor) && before === 1) {
-      const name = ctor ? cls.name : m[1], rawParams = ctor ? ctor[1] : m[2];
-      method = {name, owner:cls.name, params: splitArgs(rawParams).map(p => p.split(/\s+/).pop()), body:[], line:idx+1, startDepth:depth}; cls.methods[name] = method; return;
-    }
-    if (method) {
-      if (depth < method.startDepth) method = null;
-      else if (text.trim() && text.trim() !== '}') method.body.push({text:text.trim(), line:idx+1});
-    }
-  });
-  if (!classes.Main) throw new Error('Add a class Main so execution has a starting point. Modifiers such as public are supported.');
-  if (!classes.Main.methods.main) throw new Error('Class Main was found, but it needs a main method: public static void main(String[] args).');
-  Object.values(classes).forEach(def=>{if(def.parent && !classes[def.parent])throw new Error(`Class ${def.name} extends ${def.parent}, but ${def.parent} was not found.`)});
-  return {classes, lines};
+function syncScroll() {
+  // Match the textarea's content viewport, excluding its native scrollbars.
+  highlight.style.width = `${editor.clientWidth}px`;
+  highlight.style.height = `${editor.clientHeight}px`;
+  numbers.style.setProperty('--editor-scrollbar-height', `${editor.offsetHeight-editor.clientHeight}px`);
+  highlight.scrollTop = editor.scrollTop;
+  highlight.scrollLeft = editor.scrollLeft;
+  numbers.scrollTop = editor.scrollTop;
 }
 
-function simulate(source) {
-  const {classes} = compile(source), out = [], objects = {}, stack = [], consoleLines = []; let nextId = 1;
-  const snapshot = (kind, line, title, text, changed = null) => out.push({kind,line,title,text,changed,stack:structuredClone(stack),objects:structuredClone(objects),console:[...consoleLines]});
-  const frame = (name, vars={}) => ({name, vars});
-  const classChain = name => { const chain=[]; const seen=new Set(); let def=classes[name]; while(def&&!seen.has(def.name)){seen.add(def.name);chain.unshift(def);def=classes[def.parent]} return chain };
-  const allFields = name => classChain(name).flatMap(def=>def.fields);
-  const findMethod = (name, methodName) => { let def=classes[name]; const seen=new Set(); while(def&&!seen.has(def.name)){seen.add(def.name);if(def.methods[methodName])return def.methods[methodName];def=classes[def.parent]} return null };
-  const splitPlus = expr => { const parts=[];let quote=false,escaped=false,start=0;for(let i=0;i<expr.length;i++){const c=expr[i];if(c==='"'&&!escaped)quote=!quote;if(c==='+'&&!quote){parts.push(expr.slice(start,i));start=i+1}escaped=c==='\\'&&!escaped;if(c!=='\\')escaped=false}parts.push(expr.slice(start));return parts };
-  const evaluate = (raw, env={}, fields={}) => {
-    raw=raw.trim();const parts=splitPlus(raw);if(parts.length>1){const values=parts.map(part=>evaluate(part,env,fields));return values.every(value=>typeof value==='number')?values.reduce((sum,value)=>sum+value,0):values.map(value=>String(value)).join('')}
-    if(raw==='null')return null;if(raw==='true')return true;if(raw==='false')return false;
-    if(/^"(?:\\.|[^"\\])*"$/.test(raw))return raw.slice(1,-1).replace(/\\"/g,'"').replace(/\\n/g,'\n');
-    if(/^-?\d+(?:\.\d+)?$/.test(raw))return Number(raw);
-    const chain=raw.replace(/^this\./,'').split('.');let value=chain[0] in env?env[chain.shift()]:chain[0] in fields?fields[chain.shift()]:undefined;
-    for(const field of chain){if(value?.ref)value=objects[value.ref]?.fields[field];else return undefined}return value;
-  };
-  function runBody(body, currentClass, selfId, env, frameName) {
-    for (const ins of body) {
-      const t = ins.text.replace(/;$/, '');
-      let m;
-      if ((m=t.match(/^(\w+)\s+(\w+)\s*=\s*new\s+(\w+)\((.*)\)$/))) {
-        const [,type,name,className,argsRaw]=m, def=classes[className]; if(!def) throw new Error(`Line ${ins.line}: class ${className} was not found.`);
-        snapshot('focus',ins.line,'Evaluating object creation',`Java evaluates “new ${className}(…)” and asks the heap for space.`);
-        const id=nextId++, fields={}; allFields(className).forEach(f=>fields[f.name]=['int','double','long'].includes(f.type)?0:f.type==='boolean'?false:f.type==='char'?'\\0':null); objects[id]={id,className,fields};
-        env[name]={ref:id,type}; stack[stack.length-1].vars[name]=env[name]; snapshot('create',ins.line,'Object created',`A new ${className} object gets its own identity: #${id}.`,id);
-        const ctor=def.methods[className], args=splitArgs(argsRaw).map(a=>evaluate(a,env,{})); if(ctor){const locals={this:{ref:id,type:className}};ctor.params.forEach((p,i)=>locals[p]=args[i]);stack.push(frame(`${className}(…)`,locals));snapshot('call',ctor.line,'Constructor called',`A constructor frame is pushed onto the call stack.`);runBody(ctor.body,className,id,locals,`${className}(…)`);stack.pop();snapshot('return',ins.line,'Constructor finished',`Control returns to main. ${name} now stores a reference to object #${id}.`);}
-      } else if ((m=t.match(/^(\w+)\s+(\w+)\s*=\s*(\w+)$/)) && env[m[3]]?.ref) {
-        env[m[2]]={...env[m[3]],type:m[1]};stack[stack.length-1].vars[m[2]]=env[m[2]];snapshot('reference',ins.line,'Reference copied',`${m[2]} and ${m[3]} now point to the same object #${env[m[3]].ref}.`,env[m[3]].ref);
-      } else if ((m=t.match(/^(\w+)\.(\w+)\((.*)\)$/))) {
-        const [,varName,methodName,argsRaw]=m, ref=env[varName];if(!ref?.ref)throw new Error(`Line ${ins.line}: ${varName} is not an object reference.`);const obj=objects[ref.ref],methodDef=findMethod(obj.className,methodName);if(!methodDef)throw new Error(`Line ${ins.line}: ${obj.className}.${methodName} was not found, including inherited methods.`);
-        const args=splitArgs(argsRaw).map(a=>evaluate(a,env,obj.fields)),locals={this:{ref:obj.id,type:obj.className}};methodDef.params.forEach((p,i)=>locals[p]=args[i]);snapshot('focus',ins.line,'Calling a method',`${varName}.${methodName}(…) sends a message to object #${obj.id}. Java dispatches to ${methodDef.owner}.${methodName}.`,obj.id);stack.push(frame(`${methodDef.owner}.${methodName}(…)`,locals));snapshot('call',methodDef.line,methodDef.owner===obj.className?'Method frame pushed':'Inherited method found',methodDef.owner===obj.className?'Parameters and this live in a fresh stack frame.':`${obj.className} inherits this method from ${methodDef.owner}.`);runBody(methodDef.body,methodDef.owner,obj.id,locals,`${methodDef.owner}.${methodName}(…)`);stack.pop();snapshot('return',ins.line,'Method returned',`The method frame is removed. The object remains on the heap.`,obj.id);
-      } else if ((m=t.match(/^System\.out\.println\((.+)\)$/))) {
-        const value=evaluate(m[1],env,selfId?objects[selfId].fields:{});consoleLines.push(String(value));snapshot('output',ins.line,'Value printed',`println evaluates the expression and sends “${value}” to the console.`);
-      } else if ((m=t.match(/^(\w+)\.(\w+)\s*=\s*(.+)$/))) {
-        const [,varName,fieldName,rawValue]=m,ref=env[varName];if(!ref?.ref)throw new Error(`Line ${ins.line}: ${varName} is not an object reference.`);const obj=objects[ref.ref];if(!(fieldName in obj.fields))throw new Error(`Line ${ins.line}: field ${fieldName} does not exist on ${obj.className} or its parent classes.`);obj.fields[fieldName]=evaluate(rawValue,env,obj.fields);snapshot('mutate',ins.line,'Object state changed',`${varName}.${fieldName} updates the ${fieldName} field stored inside object #${obj.id}.`,obj.id);
-      } else if ((m=t.match(/^(?:this\.)?(\w+)\s*=\s*(.+)$/))) {
-        if(!selfId) throw new Error(`Line ${ins.line}: field assignment needs an object.`);const obj=objects[selfId],name=m[1],value=evaluate(m[2],env,obj.fields);if(!(name in obj.fields))throw new Error(`Line ${ins.line}: field ${name} was not declared.`);obj.fields[name]=value;snapshot('mutate',ins.line,'Object state changed',`The ${name} field of object #${selfId} is now ${JSON.stringify(value)}.`,selfId);
-      }
-    }
-  }
-  const main=classes.Main.methods.main;stack.push(frame('Main.main(…)',{}));snapshot('start',main.line,'Program started','Java creates the main stack frame. Local variables will appear inside it.');runBody(main.body,'Main',null,stack[0].vars,'Main.main(…)');snapshot('done',main.line,'Program finished','The main method has reached its end. All steps are complete.');return out;
-}
+const { simulate } = ObjectLabInterpreter;
 
 function formatValue(v, sourceId='') { if(v && typeof v==='object' && v.ref) return `<span class="ref-value" id="${sourceId}" data-ref="${v.ref}" title="Reference to object #${v.ref}"><span class="ref-dot"></span>${escapeHtml(v.type)} #${v.ref}</span>`; return escapeHtml(v===null?'null':typeof v==='string'?`"${v}"`:v); }
 const palette=['#68c7ab','#5c77d8','#e7994a','#9a72ce','#e06d84'];
@@ -214,7 +230,7 @@ function renderState() {
 }
 function scrollEditorToLine(line){
   if(!line)return;
-  const lineHeight=22,padding=16,target=(line-1)*lineHeight+padding;
+  const style=getComputedStyle(editor),lineHeight=parseFloat(style.lineHeight),padding=parseFloat(style.paddingTop),target=(line-1)*lineHeight+padding;
   const visibleTop=editor.scrollTop,visibleBottom=visibleTop+editor.clientHeight;
   if(target<visibleTop+lineHeight||target>visibleBottom-lineHeight*2){
     editor.scrollTop=Math.max(0,target-editor.clientHeight/2+lineHeight/2);
@@ -240,14 +256,20 @@ function prev(){stop();if(step>0){step--;renderState()}}
 function play(){if(!events.length)run();if(!events.length)return;if(timer){stop();return}if(step===events.length-1)step=0;$('playBtn').textContent='Ⅱ';timer=setInterval(next,Number($('speedSelect').value))}
 function stop(){clearInterval(timer);timer=null;$('playBtn').textContent='▶'}
 function showToast(msg,error=false){const t=$('toast');t.textContent=msg;t.style.background=error?'#b94837':'#24314a';t.classList.add('show');clearTimeout(t._timer);t._timer=setTimeout(()=>t.classList.remove('show'),2800)}
-function setExample(key){clearExecution();editor.value=examples[key];savedCode=editor.value;renderEditor();$('dirtyDot').classList.remove('visible');}
+function setExample(key){clearExecution();editor.value=examples[key];editor.scrollTop=0;editor.scrollLeft=0;savedCode=editor.value;renderEditor();$('dirtyDot').classList.remove('visible');}
 
 editor.addEventListener('focus',()=>document.querySelector('.editor-wrap').classList.add('editing'));
 editor.addEventListener('blur',()=>document.querySelector('.editor-wrap').classList.remove('editing'));
-editor.addEventListener('input',()=>{renderEditor();$('dirtyDot').classList.toggle('visible',editor.value!==savedCode)});editor.addEventListener('scroll',syncScroll);editor.addEventListener('keydown',e=>{if(e.key==='Tab'){e.preventDefault();const a=editor.selectionStart,b=editor.selectionEnd;editor.setRangeText('    ',a,b,'end');renderEditor()}});
+editor.addEventListener('input',()=>{clearExecution('READY','Code changed. Press Visualize to create a new execution.');renderEditor();$('dirtyDot').classList.toggle('visible',editor.value!==savedCode)});editor.addEventListener('scroll',syncScroll);editor.addEventListener('keydown',e=>{if(e.key==='Tab'){e.preventDefault();const a=editor.selectionStart,b=editor.selectionEnd;editor.setRangeText('    ',a,b,'end');editor.dispatchEvent(new Event('input'))}});
 document.querySelector('.editor-wrap').addEventListener('wheel',e=>{
   if(e.ctrlKey)return;
-  if(e.target!==editor){e.preventDefault();editor.scrollTop+=e.deltaY;editor.scrollLeft+=e.deltaX;syncScroll()}
+  if(e.target!==editor){
+    e.preventDefault();
+    const unit=e.deltaMode===1?parseFloat(getComputedStyle(editor).lineHeight):e.deltaMode===2?editor.clientHeight:1;
+    if(e.shiftKey)editor.scrollLeft+=(e.deltaX||e.deltaY)*unit;
+    else{editor.scrollTop+=e.deltaY*unit;editor.scrollLeft+=e.deltaX*unit;}
+    syncScroll();
+  }
 },{passive:false});
 $('runBtn').onclick=run;$('resetBtn').onclick=()=>setExample($('exampleSelect').value);$('exampleSelect').onchange=e=>setExample(e.target.value);$('prevBtn').onclick=prev;$('nextBtn').onclick=next;$('playBtn').onclick=play;$('timeline').oninput=e=>{stop();step=Number(e.target.value);renderState()};$('speedSelect').onchange=()=>{if(timer){stop();play()}};$('clearConsoleBtn').onclick=()=>$('consoleOutput').innerHTML='<span class="console-muted">Console cleared.</span>';
 $('themeBtn').onclick=()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
@@ -255,5 +277,7 @@ document.querySelectorAll('.view-tab').forEach(btn=>btn.onclick=()=>{document.qu
 $('shortcutsBtn').onclick=()=>$('shortcutsDialog').showModal();$('closeDialog').onclick=()=>$('shortcutsDialog').close();
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();run()}else if(document.activeElement!==editor&&e.key==='ArrowRight')next();else if(document.activeElement!==editor&&e.key==='ArrowLeft')prev();else if(document.activeElement!==editor&&e.code==='Space'){e.preventDefault();play()}});
 window.addEventListener('resize',()=>requestAnimationFrame(drawReferenceArrows));$('stackArea').addEventListener('scroll',drawReferenceArrows);$('heapArea').addEventListener('scroll',drawReferenceArrows);
+new ResizeObserver(syncScroll).observe(editor);
+document.fonts.ready.then(syncScroll);
 setExample('bank');
 setTheme(localStorage.getItem('objectlab-theme') || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'));

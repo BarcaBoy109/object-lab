@@ -37,12 +37,16 @@
           <option value="reference">Shared references</option>
           <option value="counter">Two counters</option>
           <option value="graph">Objects inside objects</option>
+          <option value="inheritance">Inheritance &amp; overriding</option>
+          <option value="overloading">Method &amp; constructor overloads</option>
+          <option value="loops">Loops</option>
+          <option value="blank">Blank slate</option>
         </select>
       </div>
       <div class="editor-wrap">
         <div class="line-numbers" id="lineNumbers" aria-hidden="true"></div>
         <pre class="code-highlight" id="codeHighlight" aria-hidden="true"></pre>
-        <textarea id="codeEditor" spellcheck="false" aria-label="Java source code"></textarea>
+        <textarea id="codeEditor" wrap="off" spellcheck="false" aria-label="Java source code" placeholder="Start writing your Java code here…&#10;&#10;Tip: include a class Main with a main method to visualize it."></textarea>
       </div>
       <div class="editor-footer">
         <span><span class="status-dot"></span> Learning subset of Java</span>
@@ -133,6 +137,7 @@
   </dialog>
 
   <div class="toast" id="toast" role="status"></div>
+  <script src="interpreter.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
