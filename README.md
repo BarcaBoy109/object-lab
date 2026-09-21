@@ -45,6 +45,16 @@ With Node.js installed, run the regression suite:
 node --test tests/interpreter.test.js
 ```
 
+## Use from another project
+
+The visualizer engine is also available as a small JavaScript API. See [API.md](API.md) for browser and Node.js examples:
+
+```js
+const ObjectLab = require('./api.js');
+const events = ObjectLab.simulate(javaSource);
+console.log(events.at(-1).console);
+```
+
 ## Keyboard shortcuts
 
 - `Ctrl + Enter`: visualize
