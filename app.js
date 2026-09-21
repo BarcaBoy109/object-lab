@@ -250,7 +250,8 @@ function clearExecution(label='READY',message='Choose an example or write code, 
   $('heapArea').innerHTML='<div class="empty-state compact"><div class="empty-symbol">○</div><p>'+(label==='ERROR'?'No stale objects are shown.':'Created objects will appear here.')+'</p></div>';
   $('consoleOutput').innerHTML='<span class="console-muted">'+(label==='ERROR'?'Nothing was executed.':'Output will appear here…')+'</span>';$('storyList').innerHTML='';$('explanationNumber').textContent=label==='ERROR'?'!':'i';$('explanationLabel').textContent=label;$('explanationText').textContent=message;$('prevBtn').disabled=true;$('nextBtn').disabled=true;
 }
-function run() { stop();editor.blur();try{const nextEvents=simulate(editor.value);events=nextEvents;step=0;savedCode=editor.value;$('dirtyDot').classList.remove('visible');$('timeline').max=Math.max(0,events.length-1);$('eventDots').innerHTML=events.map(()=>'<i class="event-dot"></i>').join('');renderState();showToast(`${events.length} learning steps created.`);}catch(err){clearExecution('ERROR',err.message);renderEditor();showToast(err.message,true);} }
+function run() { stop();editor.blur();try{const nextEvents=simulate(editor.value);events=nextEvents;step=0;savedCode=editor.value;$('dirtyDot').classList.remove('visible');$('timeline').max=Math.max(0,events.length-1);$('eventDots').innerHTML=events.map(()=>'<i class="event-dot"></i>').join('');renderState();showToast(`${events.length} learning steps created.`);return true;}catch(err){clearExecution('ERROR',err.message);renderEditor();showToast(err.message,true);return false;} }
+function visualize(){if(run())play()}
 function next(){if(!events.length)return run();if(step<events.length-1){step++;renderState()}else stop()}
 function prev(){stop();if(step>0){step--;renderState()}}
 function play(){if(!events.length)run();if(!events.length)return;if(timer){stop();return}if(step===events.length-1)step=0;$('playBtn').textContent='Ⅱ';timer=setInterval(next,Number($('speedSelect').value))}
@@ -271,7 +272,7 @@ document.querySelector('.editor-wrap').addEventListener('wheel',e=>{
     syncScroll();
   }
 },{passive:false});
-$('runBtn').onclick=run;$('resetBtn').onclick=()=>setExample($('exampleSelect').value);$('exampleSelect').onchange=e=>setExample(e.target.value);$('prevBtn').onclick=prev;$('nextBtn').onclick=next;$('playBtn').onclick=play;$('timeline').oninput=e=>{stop();step=Number(e.target.value);renderState()};$('speedSelect').onchange=()=>{if(timer){stop();play()}};$('clearConsoleBtn').onclick=()=>$('consoleOutput').innerHTML='<span class="console-muted">Console cleared.</span>';
+$('runBtn').onclick=visualize;$('resetBtn').onclick=()=>setExample($('exampleSelect').value);$('exampleSelect').onchange=e=>setExample(e.target.value);$('prevBtn').onclick=prev;$('nextBtn').onclick=next;$('playBtn').onclick=play;$('timeline').oninput=e=>{stop();step=Number(e.target.value);renderState()};$('speedSelect').onchange=()=>{if(timer){stop();play()}};$('clearConsoleBtn').onclick=()=>$('consoleOutput').innerHTML='<span class="console-muted">Console cleared.</span>';
 $('themeBtn').onclick=()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
 document.querySelectorAll('.view-tab').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.view-tab').forEach(b=>b.classList.toggle('active',b===btn));$('memoryView').hidden=btn.dataset.view!=='memory';$('storyView').hidden=btn.dataset.view!=='story'});
 $('shortcutsBtn').onclick=()=>$('shortcutsDialog').showModal();$('closeDialog').onclick=()=>$('shortcutsDialog').close();
