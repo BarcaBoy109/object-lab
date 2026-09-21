@@ -126,26 +126,32 @@ function splitArgs(s) { return s ? (s.match(/(?:[^,"']|"[^"]*")+/g) || []).map(x
 
 function compile(source) {
   const lines = source.split('\n');
-  const classes = {}, classRe = /^\s*class\s+(\w+)/, fieldRe = /^\s*([A-Z]\w*|int|boolean|double|long|char)\s+(\w+)\s*;/;
+  const modifiers = '(?:(?:public|private|protected|abstract|final|static)\\s+)*';
+  const classRe = new RegExp('^\\s*' + modifiers + 'class\\s+(\\w+)(?:\\s+extends\\s+(\\w+))?');
+  const fieldRe = /^\s*(?:(?:public|private|protected|static|final|transient|volatile)\s+)*([A-Z]\w*|int|boolean|double|long|char)\s+(\w+)(?:\s*=\s*[^;]+)?\s*;/;
+  const methodRe = /^\s*(?:(?:public|private|protected|static|final|abstract|synchronized)\s+)*(?:void|int|String|boolean|double|long|char|\w+(?:\[\])?)\s+(\w+)\s*\(([^)]*)\)\s*\{/;
+  const classes = {};
   let cls = null, method = null, depth = 0;
   lines.forEach((text, idx) => {
     const c = text.match(classRe);
-    if (c) { cls = { name:c[1], fields:[], methods:{} }; classes[c[1]] = cls; depth = 0; }
+    if (c) { cls = { name:c[1], parent:c[2] || null, fields:[], methods:{} }; classes[c[1]] = cls; method = null; depth = 0; }
     if (!cls) return;
     const before = depth; depth += (text.match(/{/g)||[]).length - (text.match(/}/g)||[]).length;
     const f = text.match(fieldRe); if (f && !method && depth === 1) cls.fields.push({type:f[1], name:f[2]});
-    const m = text.match(/^\s*(?:public\s+static\s+)?(?:void|int|String|boolean|\w+)\s+(\w+)\s*\(([^)]*)\)\s*\{/);
-    const ctor = text.match(new RegExp('^\\s*' + cls.name + '\\s*\\(([^)]*)\\)\\s*\\{'));
+    const m = text.match(methodRe);
+    const ctor = text.match(new RegExp('^\\s*' + modifiers + cls.name + '\\s*\\(([^)]*)\\)\\s*\\{'));
     if ((m || ctor) && before === 1) {
       const name = ctor ? cls.name : m[1], rawParams = ctor ? ctor[1] : m[2];
-      method = {name, params: splitArgs(rawParams).map(p => p.split(/\s+/).pop()), body:[], line:idx+1, startDepth:depth}; cls.methods[name] = method; return;
+      method = {name, owner:cls.name, params: splitArgs(rawParams).map(p => p.split(/\s+/).pop()), body:[], line:idx+1, startDepth:depth}; cls.methods[name] = method; return;
     }
     if (method) {
       if (depth < method.startDepth) method = null;
       else if (text.trim() && text.trim() !== '}') method.body.push({text:text.trim(), line:idx+1});
     }
   });
-  if (!classes.Main?.methods.main) throw new Error('Add a class Main with a main method so execution has a starting point.');
+  if (!classes.Main) throw new Error('Add a class Main so execution has a starting point. Modifiers such as public are supported.');
+  if (!classes.Main.methods.main) throw new Error('Class Main was found, but it needs a main method: public static void main(String[] args).');
+  Object.values(classes).forEach(def=>{if(def.parent && !classes[def.parent])throw new Error(`Class ${def.name} extends ${def.parent}, but ${def.parent} was not found.`)});
   return {classes, lines};
 }
 
@@ -153,6 +159,18 @@ function simulate(source) {
   const {classes} = compile(source), out = [], objects = {}, stack = [], consoleLines = []; let nextId = 1;
   const snapshot = (kind, line, title, text, changed = null) => out.push({kind,line,title,text,changed,stack:structuredClone(stack),objects:structuredClone(objects),console:[...consoleLines]});
   const frame = (name, vars={}) => ({name, vars});
+  const classChain = name => { const chain=[]; const seen=new Set(); let def=classes[name]; while(def&&!seen.has(def.name)){seen.add(def.name);chain.unshift(def);def=classes[def.parent]} return chain };
+  const allFields = name => classChain(name).flatMap(def=>def.fields);
+  const findMethod = (name, methodName) => { let def=classes[name]; const seen=new Set(); while(def&&!seen.has(def.name)){seen.add(def.name);if(def.methods[methodName])return def.methods[methodName];def=classes[def.parent]} return null };
+  const splitPlus = expr => { const parts=[];let quote=false,escaped=false,start=0;for(let i=0;i<expr.length;i++){const c=expr[i];if(c==='"'&&!escaped)quote=!quote;if(c==='+'&&!quote){parts.push(expr.slice(start,i));start=i+1}escaped=c==='\\'&&!escaped;if(c!=='\\')escaped=false}parts.push(expr.slice(start));return parts };
+  const evaluate = (raw, env={}, fields={}) => {
+    raw=raw.trim();const parts=splitPlus(raw);if(parts.length>1){const values=parts.map(part=>evaluate(part,env,fields));return values.every(value=>typeof value==='number')?values.reduce((sum,value)=>sum+value,0):values.map(value=>String(value)).join('')}
+    if(raw==='null')return null;if(raw==='true')return true;if(raw==='false')return false;
+    if(/^"(?:\\.|[^"\\])*"$/.test(raw))return raw.slice(1,-1).replace(/\\"/g,'"').replace(/\\n/g,'\n');
+    if(/^-?\d+(?:\.\d+)?$/.test(raw))return Number(raw);
+    const chain=raw.replace(/^this\./,'').split('.');let value=chain[0] in env?env[chain.shift()]:chain[0] in fields?fields[chain.shift()]:undefined;
+    for(const field of chain){if(value?.ref)value=objects[value.ref]?.fields[field];else return undefined}return value;
+  };
   function runBody(body, currentClass, selfId, env, frameName) {
     for (const ins of body) {
       const t = ins.text.replace(/;$/, '');
@@ -160,18 +178,20 @@ function simulate(source) {
       if ((m=t.match(/^(\w+)\s+(\w+)\s*=\s*new\s+(\w+)\((.*)\)$/))) {
         const [,type,name,className,argsRaw]=m, def=classes[className]; if(!def) throw new Error(`Line ${ins.line}: class ${className} was not found.`);
         snapshot('focus',ins.line,'Evaluating object creation',`Java evaluates “new ${className}(…)” and asks the heap for space.`);
-        const id=nextId++, fields={}; def.fields.forEach(f=>fields[f.name]=['int','double','long'].includes(f.type)?0:f.type==='boolean'?false:f.type==='char'?'\\0':null); objects[id]={id,className,fields};
+        const id=nextId++, fields={}; allFields(className).forEach(f=>fields[f.name]=['int','double','long'].includes(f.type)?0:f.type==='boolean'?false:f.type==='char'?'\\0':null); objects[id]={id,className,fields};
         env[name]={ref:id,type}; stack[stack.length-1].vars[name]=env[name]; snapshot('create',ins.line,'Object created',`A new ${className} object gets its own identity: #${id}.`,id);
-        const ctor=def.methods[className], args=splitArgs(argsRaw).map(a=>val(a,env,{})); if(ctor){const locals={this:{ref:id,type:className}};ctor.params.forEach((p,i)=>locals[p]=args[i]);stack.push(frame(`${className}(…)`,locals));snapshot('call',ctor.line,'Constructor called',`A constructor frame is pushed onto the call stack.`);runBody(ctor.body,className,id,locals,`${className}(…)`);stack.pop();snapshot('return',ins.line,'Constructor finished',`Control returns to main. ${name} now stores a reference to object #${id}.`);}
+        const ctor=def.methods[className], args=splitArgs(argsRaw).map(a=>evaluate(a,env,{})); if(ctor){const locals={this:{ref:id,type:className}};ctor.params.forEach((p,i)=>locals[p]=args[i]);stack.push(frame(`${className}(…)`,locals));snapshot('call',ctor.line,'Constructor called',`A constructor frame is pushed onto the call stack.`);runBody(ctor.body,className,id,locals,`${className}(…)`);stack.pop();snapshot('return',ins.line,'Constructor finished',`Control returns to main. ${name} now stores a reference to object #${id}.`);}
       } else if ((m=t.match(/^(\w+)\s+(\w+)\s*=\s*(\w+)$/)) && env[m[3]]?.ref) {
         env[m[2]]={...env[m[3]],type:m[1]};stack[stack.length-1].vars[m[2]]=env[m[2]];snapshot('reference',ins.line,'Reference copied',`${m[2]} and ${m[3]} now point to the same object #${env[m[3]].ref}.`,env[m[3]].ref);
       } else if ((m=t.match(/^(\w+)\.(\w+)\((.*)\)$/))) {
-        const [,varName,methodName,argsRaw]=m, ref=env[varName];if(!ref?.ref)throw new Error(`Line ${ins.line}: ${varName} is not an object reference.`);const obj=objects[ref.ref],methodDef=classes[obj.className]?.methods[methodName];if(!methodDef)throw new Error(`Line ${ins.line}: ${obj.className}.${methodName} was not found.`);
-        const args=splitArgs(argsRaw).map(a=>val(a,env,obj.fields)),locals={this:{ref:obj.id,type:obj.className}};methodDef.params.forEach((p,i)=>locals[p]=args[i]);snapshot('focus',ins.line,'Calling a method',`${varName}.${methodName}(…) sends a message to object #${obj.id}.`,obj.id);stack.push(frame(`${obj.className}.${methodName}(…)`,locals));snapshot('call',methodDef.line,'Method frame pushed',`Parameters and this live in a fresh stack frame.`);runBody(methodDef.body,obj.className,obj.id,locals,`${obj.className}.${methodName}(…)`);stack.pop();snapshot('return',ins.line,'Method returned',`The method frame is removed. The object remains on the heap.`,obj.id);
+        const [,varName,methodName,argsRaw]=m, ref=env[varName];if(!ref?.ref)throw new Error(`Line ${ins.line}: ${varName} is not an object reference.`);const obj=objects[ref.ref],methodDef=findMethod(obj.className,methodName);if(!methodDef)throw new Error(`Line ${ins.line}: ${obj.className}.${methodName} was not found, including inherited methods.`);
+        const args=splitArgs(argsRaw).map(a=>evaluate(a,env,obj.fields)),locals={this:{ref:obj.id,type:obj.className}};methodDef.params.forEach((p,i)=>locals[p]=args[i]);snapshot('focus',ins.line,'Calling a method',`${varName}.${methodName}(…) sends a message to object #${obj.id}. Java dispatches to ${methodDef.owner}.${methodName}.`,obj.id);stack.push(frame(`${methodDef.owner}.${methodName}(…)`,locals));snapshot('call',methodDef.line,methodDef.owner===obj.className?'Method frame pushed':'Inherited method found',methodDef.owner===obj.className?'Parameters and this live in a fresh stack frame.':`${obj.className} inherits this method from ${methodDef.owner}.`);runBody(methodDef.body,methodDef.owner,obj.id,locals,`${methodDef.owner}.${methodName}(…)`);stack.pop();snapshot('return',ins.line,'Method returned',`The method frame is removed. The object remains on the heap.`,obj.id);
       } else if ((m=t.match(/^System\.out\.println\((.+)\)$/))) {
-        let expr=m[1],value;const chain=expr.split('.');if(chain.length>1&&env[chain[0]]?.ref){value=env[chain.shift()];for(const field of chain){if(value?.ref)value=objects[value.ref]?.fields[field];else{value=undefined;break}}}else value=val(expr,env,selfId?objects[selfId].fields:{});consoleLines.push(String(value));snapshot('output',ins.line,'Value printed',`println follows the references and sends “${value}” to the console.`);
+        const value=evaluate(m[1],env,selfId?objects[selfId].fields:{});consoleLines.push(String(value));snapshot('output',ins.line,'Value printed',`println evaluates the expression and sends “${value}” to the console.`);
+      } else if ((m=t.match(/^(\w+)\.(\w+)\s*=\s*(.+)$/))) {
+        const [,varName,fieldName,rawValue]=m,ref=env[varName];if(!ref?.ref)throw new Error(`Line ${ins.line}: ${varName} is not an object reference.`);const obj=objects[ref.ref];if(!(fieldName in obj.fields))throw new Error(`Line ${ins.line}: field ${fieldName} does not exist on ${obj.className} or its parent classes.`);obj.fields[fieldName]=evaluate(rawValue,env,obj.fields);snapshot('mutate',ins.line,'Object state changed',`${varName}.${fieldName} updates the ${fieldName} field stored inside object #${obj.id}.`,obj.id);
       } else if ((m=t.match(/^(?:this\.)?(\w+)\s*=\s*(.+)$/))) {
-        if(!selfId) throw new Error(`Line ${ins.line}: field assignment needs an object.`);const obj=objects[selfId],name=m[1],value=val(m[2],env,obj.fields);if(!(name in obj.fields))throw new Error(`Line ${ins.line}: field ${name} was not declared.`);obj.fields[name]=value;snapshot('mutate',ins.line,'Object state changed',`The ${name} field of object #${selfId} is now ${JSON.stringify(value)}.`,selfId);
+        if(!selfId) throw new Error(`Line ${ins.line}: field assignment needs an object.`);const obj=objects[selfId],name=m[1],value=evaluate(m[2],env,obj.fields);if(!(name in obj.fields))throw new Error(`Line ${ins.line}: field ${name} was not declared.`);obj.fields[name]=value;snapshot('mutate',ins.line,'Object state changed',`The ${name} field of object #${selfId} is now ${JSON.stringify(value)}.`,selfId);
       }
     }
   }
@@ -208,13 +228,19 @@ function drawReferenceArrows(){
   const paths=refs.map(ref=>{const target=$(`object-${ref.dataset.ref}`);if(!target)return'';const a=ref.getBoundingClientRect(),b=target.getBoundingClientRect();const x1=a.right-base.left,y1=a.top+a.height/2-base.top,x2=b.left-base.left,y2=b.top+Math.min(27,b.height/2)-base.top;const bend=Math.max(28,Math.abs(x2-x1)*.45),d=`M ${x1} ${y1} C ${x1+bend} ${y1}, ${x2-bend} ${y2}, ${x2-5} ${y2}`;const color=palette[(Number(ref.dataset.ref)-1)%palette.length];return `<path class="memory-arrow-halo" d="${d}"/><path class="memory-arrow" d="${d}" stroke="${color}" marker-end="url(#arrow-${(Number(ref.dataset.ref)-1)%palette.length})"/>`}).join('');
   svg.setAttribute('viewBox',`0 0 ${base.width} ${base.height}`);svg.innerHTML=defs+paths;
 }
-function run() { stop();editor.blur();try{events=simulate(editor.value);step=0;savedCode=editor.value;$('dirtyDot').classList.remove('visible');$('timeline').max=Math.max(0,events.length-1);$('eventDots').innerHTML=events.map(()=>'<i class="event-dot"></i>').join('');renderState();showToast(`${events.length} learning steps created.`);}catch(err){showToast(err.message,true);} }
+function clearExecution(label='READY',message='Choose an example or write code, then press Visualize.'){
+  stop();events=[];step=0;$('stepCount').textContent=label==='ERROR'?'Could not visualize':'Ready to visualize';$('timelineTitle').textContent=label==='ERROR'?'Fix the highlighted code':'No execution yet';$('timelinePosition').textContent='0 / 0';$('timeline').min=0;$('timeline').max=0;$('timeline').value=0;$('timeline').style.setProperty('--progress','0%');$('eventDots').innerHTML='';$('memoryArrows').innerHTML='';
+  $('stackArea').innerHTML='<div class="empty-state compact"><div class="empty-symbol">{ }</div><p>'+(label==='ERROR'?'Execution did not start.':'Run the code to see method frames appear here.')+'</p></div>';
+  $('heapArea').innerHTML='<div class="empty-state compact"><div class="empty-symbol">○</div><p>'+(label==='ERROR'?'No stale objects are shown.':'Created objects will appear here.')+'</p></div>';
+  $('consoleOutput').innerHTML='<span class="console-muted">'+(label==='ERROR'?'Nothing was executed.':'Output will appear here…')+'</span>';$('storyList').innerHTML='';$('explanationNumber').textContent=label==='ERROR'?'!':'i';$('explanationLabel').textContent=label;$('explanationText').textContent=message;$('prevBtn').disabled=true;$('nextBtn').disabled=true;
+}
+function run() { stop();editor.blur();try{const nextEvents=simulate(editor.value);events=nextEvents;step=0;savedCode=editor.value;$('dirtyDot').classList.remove('visible');$('timeline').max=Math.max(0,events.length-1);$('eventDots').innerHTML=events.map(()=>'<i class="event-dot"></i>').join('');renderState();showToast(`${events.length} learning steps created.`);}catch(err){clearExecution('ERROR',err.message);renderEditor();showToast(err.message,true);} }
 function next(){if(!events.length)return run();if(step<events.length-1){step++;renderState()}else stop()}
 function prev(){stop();if(step>0){step--;renderState()}}
 function play(){if(!events.length)run();if(!events.length)return;if(timer){stop();return}if(step===events.length-1)step=0;$('playBtn').textContent='Ⅱ';timer=setInterval(next,Number($('speedSelect').value))}
 function stop(){clearInterval(timer);timer=null;$('playBtn').textContent='▶'}
 function showToast(msg,error=false){const t=$('toast');t.textContent=msg;t.style.background=error?'#b94837':'#24314a';t.classList.add('show');clearTimeout(t._timer);t._timer=setTimeout(()=>t.classList.remove('show'),2800)}
-function setExample(key){stop();events=[];step=0;editor.value=examples[key];savedCode=editor.value;renderEditor();$('dirtyDot').classList.remove('visible');$('stackArea').innerHTML='<div class="empty-state compact"><div class="empty-symbol">{ }</div><p>Run the code to see method frames appear here.</p></div>';$('heapArea').innerHTML='<div class="empty-state compact"><div class="empty-symbol">○</div><p>Created objects will appear here.</p></div>';}
+function setExample(key){clearExecution();editor.value=examples[key];savedCode=editor.value;renderEditor();$('dirtyDot').classList.remove('visible');}
 
 editor.addEventListener('focus',()=>document.querySelector('.editor-wrap').classList.add('editing'));
 editor.addEventListener('blur',()=>document.querySelector('.editor-wrap').classList.remove('editing'));

@@ -20,11 +20,14 @@ Then visit `http://localhost:8000`.
 - Local object-reference variables and copied references
 - Object-typed fields, including object-to-object reference graphs
 - Visible pointers from stack environments and object fields to heap objects
+- `public` and other common class/member modifiers
+- Single inheritance with `extends`, inherited fields, inherited methods, and overriding
+- Direct object-field mutation and string concatenation in `println`
 - Constructor/method parameters
 - Field assignment and simple `+` expressions
 - `System.out.println(...)`
 
-The interpreter is intentionally small and educational. It is not a full Java compiler; inheritance, loops, conditionals, arrays, overloading, access control, static fields, and packages are planned future iterations.
+The interpreter is intentionally small and educational. It is not a full Java compiler; loops, conditionals, arrays, overloading, enforced access control, static fields, interfaces, and packages are planned future iterations.
 
 ## Keyboard shortcuts
 
