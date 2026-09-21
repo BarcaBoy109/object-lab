@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="A step-by-step Java OOP visualizer for students." />
+  <title>ObjectLab — Java OOP Visualizer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="ObjectLab home">
+      <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+      <span>Object<span>Lab</span></span>
+    </a>
+    <div class="lesson-meta">
+      <span class="eyebrow">JAVA · OBJECTS &amp; REFERENCES</span>
+      <span class="lesson-title">How objects change over time</span>
+    </div>
+    <div class="header-actions">
+      <button class="icon-button theme-button" id="themeBtn" aria-label="Switch to dark mode" title="Switch to dark mode">☾</button>
+      <button class="icon-button" id="shortcutsBtn" aria-label="Keyboard shortcuts" title="Keyboard shortcuts">?</button>
+      <button class="secondary-button" id="resetBtn">Reset</button>
+      <button class="run-button" id="runBtn"><span class="play-icon">▶</span> Visualize</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="editor-panel panel" aria-label="Java code editor">
+      <div class="panel-header">
+        <div class="file-tab"><span class="java-badge">J</span> Main.java <span class="dirty-dot" id="dirtyDot"></span></div>
+        <select id="exampleSelect" aria-label="Choose an example">
+          <option value="bank">Bank account</option>
+          <option value="reference">Shared references</option>
+          <option value="counter">Two counters</option>
+          <option value="graph">Objects inside objects</option>
+        </select>
+      </div>
+      <div class="editor-wrap">
+        <div class="line-numbers" id="lineNumbers" aria-hidden="true"></div>
+        <pre class="code-highlight" id="codeHighlight" aria-hidden="true"></pre>
+        <textarea id="codeEditor" spellcheck="false" aria-label="Java source code"></textarea>
+      </div>
+      <div class="editor-footer">
+        <span><span class="status-dot"></span> Learning subset of Java</span>
+        <span>Spaces: 4&nbsp;&nbsp; UTF-8</span>
+      </div>
+    </section>
+
+    <section class="visual-panel panel" aria-label="Program visualization">
+      <div class="panel-header visual-header">
+        <div class="view-tabs" role="tablist">
+          <button class="view-tab active" data-view="memory">Memory</button>
+          <button class="view-tab" data-view="story">Story</button>
+        </div>
+        <div class="step-count" id="stepCount">Ready to visualize</div>
+      </div>
+
+      <div class="visual-content" id="memoryView">
+        <svg class="memory-arrows" id="memoryArrows" aria-hidden="true"></svg>
+        <div class="memory-section stack-section">
+          <div class="section-heading">
+            <div><span class="section-icon stack-icon">▥</span><strong>Stack &amp; environments</strong></div>
+            <span class="section-hint">one local environment per call</span>
+          </div>
+          <div class="stack-area" id="stackArea">
+            <div class="empty-state compact"><div class="empty-symbol">{ }</div><p>Run the code to see method frames appear here.</p></div>
+          </div>
+        </div>
+        <div class="memory-section heap-section">
+          <div class="section-heading">
+            <div><span class="section-icon heap-icon">◇</span><strong>Heap</strong></div>
+            <span class="section-hint">objects live here</span>
+          </div>
+          <div class="heap-area" id="heapArea">
+            <svg class="reference-layer" id="referenceLayer" aria-hidden="true"></svg>
+            <div class="empty-state compact"><div class="empty-symbol">○</div><p>Created objects will appear here.</p></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="story-view" id="storyView" hidden>
+        <div class="story-list" id="storyList"></div>
+      </div>
+
+      <div class="explanation-card" id="explanationCard">
+        <div class="explanation-number" id="explanationNumber">i</div>
+        <div><span class="eyebrow" id="explanationLabel">READY</span><p id="explanationText">Choose an example or write code, then press Visualize.</p></div>
+      </div>
+    </section>
+
+    <aside class="console-panel panel" aria-label="Program output">
+      <div class="panel-header">
+        <div class="console-title"><span>&gt;_</span> Console</div>
+        <button class="text-button" id="clearConsoleBtn">Clear</button>
+      </div>
+      <div class="console-output" id="consoleOutput"><span class="console-muted">Output will appear here…</span></div>
+      <div class="concept-card">
+        <div class="concept-label">CONCEPT IN FOCUS</div>
+        <div class="concept-title"><span>↗</span> References</div>
+        <p>Variables store a reference to an object—not the object itself. Two variables can point to the same object.</p>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="timeline-bar">
+    <div class="transport">
+      <button class="transport-button" id="prevBtn" aria-label="Previous step">│◀</button>
+      <button class="main-transport" id="playBtn" aria-label="Play visualization">▶</button>
+      <button class="transport-button" id="nextBtn" aria-label="Next step">▶│</button>
+    </div>
+    <div class="timeline-wrap">
+      <div class="timeline-labels"><span id="timelineTitle">No execution yet</span><span id="timelinePosition">0 / 0</span></div>
+      <input type="range" id="timeline" min="0" max="0" value="0" aria-label="Execution step" />
+      <div class="event-dots" id="eventDots"></div>
+    </div>
+    <label class="speed-control">Speed
+      <select id="speedSelect"><option value="1200">0.5×</option><option value="750" selected>1×</option><option value="400">1.5×</option><option value="220">2×</option></select>
+    </label>
+  </footer>
+
+  <dialog id="shortcutsDialog">
+    <button class="dialog-close" id="closeDialog" aria-label="Close">×</button>
+    <span class="eyebrow">MOVE FASTER</span>
+    <h2>Keyboard shortcuts</h2>
+    <div class="shortcut-row"><span>Visualize code</span><kbd>Ctrl</kbd> + <kbd>Enter</kbd></div>
+    <div class="shortcut-row"><span>Next step</span><kbd>→</kbd></div>
+    <div class="shortcut-row"><span>Previous step</span><kbd>←</kbd></div>
+    <div class="shortcut-row"><span>Play / pause</span><kbd>Space</kbd></div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>
