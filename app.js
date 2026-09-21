@@ -225,6 +225,7 @@ function renderState() {
   const objs=Object.values(e.objects);$('heapArea').innerHTML=(objs.length?objs.map((o,i)=>`<div class="object-card ${e.changed===o.id?'changed':''}" id="object-${o.id}" style="--object-color:${palette[(o.id-1)%palette.length]}"><div class="object-header"><span>${escapeHtml(o.className)}</span><span class="object-id">OBJECT #${o.id}</span></div><div class="object-body">${Object.entries(o.fields).map(([k,v],j)=>`<div class="field-row"><span class="field-name">${escapeHtml(k)}</span><span class="field-value">${formatValue(v,`ref-field-${o.id}-${j}`)}</span></div>`).join('')}</div></div>`).join(''):'<div class="empty-state compact"><div class="empty-symbol">○</div><p>No objects exist yet.</p></div>');
   $('consoleOutput').innerHTML=e.console.length?e.console.map(x=>`<div class="console-line">${escapeHtml(x)}</div>`).join(''):'<span class="console-muted">Output will appear here…</span>';
   $('storyList').innerHTML=events.map((x,i)=>`<div class="story-item ${i<=step?'reached':''} ${i===step?'active':''}"><button class="story-index" type="button" data-step="${i}" aria-label="Go to step ${i+1}">${i+1}</button><div class="story-copy"><strong>${escapeHtml(x.title)}</strong>${escapeHtml(x.text)}</div></div>`).join('');
+  if(!$('storyView').hidden){$('storyList').querySelector('.story-item.active')?.scrollIntoView({block:'nearest'});}
   scrollEditorToLine(e.line);
   $('prevBtn').disabled=step===0;$('nextBtn').disabled=step===events.length-1;requestAnimationFrame(drawReferenceArrows);
 }
