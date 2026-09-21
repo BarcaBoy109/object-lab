@@ -208,7 +208,7 @@ function drawReferenceArrows(){
   const paths=refs.map(ref=>{const target=$(`object-${ref.dataset.ref}`);if(!target)return'';const a=ref.getBoundingClientRect(),b=target.getBoundingClientRect();const x1=a.right-base.left,y1=a.top+a.height/2-base.top,x2=b.left-base.left,y2=b.top+Math.min(27,b.height/2)-base.top;const bend=Math.max(28,Math.abs(x2-x1)*.45),d=`M ${x1} ${y1} C ${x1+bend} ${y1}, ${x2-bend} ${y2}, ${x2-5} ${y2}`;const color=palette[(Number(ref.dataset.ref)-1)%palette.length];return `<path class="memory-arrow-halo" d="${d}"/><path class="memory-arrow" d="${d}" stroke="${color}" marker-end="url(#arrow-${(Number(ref.dataset.ref)-1)%palette.length})"/>`}).join('');
   svg.setAttribute('viewBox',`0 0 ${base.width} ${base.height}`);svg.innerHTML=defs+paths;
 }
-function run() { stop();try{events=simulate(editor.value);step=0;savedCode=editor.value;$('dirtyDot').classList.remove('visible');$('timeline').max=Math.max(0,events.length-1);$('eventDots').innerHTML=events.map(()=>'<i class="event-dot"></i>').join('');renderState();showToast(`${events.length} learning steps created.`);}catch(err){showToast(err.message,true);} }
+function run() { stop();editor.blur();try{events=simulate(editor.value);step=0;savedCode=editor.value;$('dirtyDot').classList.remove('visible');$('timeline').max=Math.max(0,events.length-1);$('eventDots').innerHTML=events.map(()=>'<i class="event-dot"></i>').join('');renderState();showToast(`${events.length} learning steps created.`);}catch(err){showToast(err.message,true);} }
 function next(){if(!events.length)return run();if(step<events.length-1){step++;renderState()}else stop()}
 function prev(){stop();if(step>0){step--;renderState()}}
 function play(){if(!events.length)run();if(!events.length)return;if(timer){stop();return}if(step===events.length-1)step=0;$('playBtn').textContent='Ⅱ';timer=setInterval(next,Number($('speedSelect').value))}
@@ -216,6 +216,8 @@ function stop(){clearInterval(timer);timer=null;$('playBtn').textContent='▶'}
 function showToast(msg,error=false){const t=$('toast');t.textContent=msg;t.style.background=error?'#b94837':'#24314a';t.classList.add('show');clearTimeout(t._timer);t._timer=setTimeout(()=>t.classList.remove('show'),2800)}
 function setExample(key){stop();events=[];step=0;editor.value=examples[key];savedCode=editor.value;renderEditor();$('dirtyDot').classList.remove('visible');$('stackArea').innerHTML='<div class="empty-state compact"><div class="empty-symbol">{ }</div><p>Run the code to see method frames appear here.</p></div>';$('heapArea').innerHTML='<div class="empty-state compact"><div class="empty-symbol">○</div><p>Created objects will appear here.</p></div>';}
 
+editor.addEventListener('focus',()=>document.querySelector('.editor-wrap').classList.add('editing'));
+editor.addEventListener('blur',()=>document.querySelector('.editor-wrap').classList.remove('editing'));
 editor.addEventListener('input',()=>{renderEditor();$('dirtyDot').classList.toggle('visible',editor.value!==savedCode)});editor.addEventListener('scroll',syncScroll);editor.addEventListener('keydown',e=>{if(e.key==='Tab'){e.preventDefault();const a=editor.selectionStart,b=editor.selectionEnd;editor.setRangeText('    ',a,b,'end');renderEditor()}});
 document.querySelector('.editor-wrap').addEventListener('wheel',e=>{
   if(e.ctrlKey)return;
