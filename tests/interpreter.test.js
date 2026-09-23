@@ -7,7 +7,7 @@ const {simulate, compile} = require('../interpreter.js');
 const program = (body, classes = '') => `${classes}\nclass Main { public static void main(String[] args) { ${body} } }`;
 const output = source => simulate(source).at(-1).console;
 const examples = vm.runInNewContext(fs.readFileSync(require.resolve('../app.js'), 'utf8').split('const $ =')[0] + '\nexamples;');
-for (const [name, expected] of Object.entries({bank:['150'], reference:['Pixel'], counter:['2'], graph:['Leo'], inheritance:['Meet Mochi', 'Mochi says woof!'], overloading:['Total: 14', 'Other: 10'], loops:['3']})) {
+for (const [name, expected] of Object.entries({bank:['150'], reference:['Pixel'], counter:['2'], graph:['Leo'], inheritance:['Meet Mochi', 'Mochi says woof!'], overloading:['Total: 14', 'Other: 10'], loops:['3'], arrays:['3', '7'], arrayFor:['10'], arrayAlias:['9'], polymorphicArrays:['dog']})) {
   test(`example: ${name}`, () => assert.deepEqual(output(examples[name]), expected));
 }
 
@@ -152,4 +152,42 @@ test('covariant overrides preserve the caller-declared return type for overload 
     class Child extends Parent { @Override Dog make() { return new Dog(); } }
     class Test { void pick(Animal a) { System.out.println("animal"); } void pick(Dog d) { System.out.println("dog"); } }
   `)), ['animal']);
+});
+
+test('one-dimensional arrays support literals, aliases, indexed mutation, defaults, and stable snapshots', () => {
+  const source = program('int[] values = {1, 2, 3}; int[] alias = values; alias[1] += 4; values[2]++; int[] empty = new int[0]; int[] defaults = new int[2]; System.out.println(values.length); System.out.println(values[1]); System.out.println(values[2]); System.out.println(empty.length); System.out.println(defaults[0]);');
+  const trace = simulate(source);
+  assert.deepEqual(trace.at(-1).console, ['3', '6', '4', '0', '0']);
+  const arrays = trace.filter(e => e.arrays?.['1']);
+  assert.ok(arrays.length > 1);
+  assert.notDeepEqual(arrays[0].arrays['1'].values, arrays.at(-1).arrays['1'].values);
+});
+
+for (const [name, source, message] of [
+  ['negative array size', program('int[] a = new int[-1];'), /non-negative integer/],
+  ['out of bounds index', program('int[] a = new int[1]; System.out.println(a[1]);'), /out of bounds/],
+  ['length write', program('int[] a = new int[1]; a.length = 2;'), /read-only/],
+  ['multidimensional array', program('int[][] a = new int[2];'), /Multidimensional arrays/],
+]) test(`array diagnostic: ${name}`, () => assert.throws(() => simulate(source), message));
+
+test('enhanced for-each binds elements in order, scopes the variable, and supports control flow', () => {
+  const source = program('int[] values = {1, 2, 3, 4}; int total = 0; for (int item : values) { if (item == 2) continue; if (item == 4) break; total += item; } System.out.println(total);');
+  const trace = simulate(source);
+  assert.deepEqual(trace.at(-1).console, ['4']);
+  const iterations = trace.filter(e => e.kind === 'iteration');
+  assert.equal(iterations.length, 4);
+  assert.deepEqual(iterations.map(e => e.changedIndex), [0, 1, 2, 3]);
+  assert.throws(() => simulate(program('int[] values = {1}; for (int item : values) {} System.out.println(item);')), /Unknown variable/);
+});
+
+test('for-each evaluates its array expression once and object values keep identity', () => {
+  const source = program('Box[] boxes = {new Box(1), new Box(2)}; for (Box box : boxes) { box.n++; } System.out.println(boxes[0].n); System.out.println(boxes[1].n);', 'class Box { int n; Box(int n) { this.n = n; } }');
+  assert.deepEqual(output(source), ['2', '3']);
+});
+
+test('explicit array component types survive empty literals and method boundaries', () => {
+  const source = program('String[] empty = new String[]{}; int[] values = Test.make(); Test.take(values); System.out.println(empty.length); System.out.println(values[0]);', `
+    class Test { static int[] make() { return new int[]{7}; } static void take(int[] values) { System.out.println(values.length); } }
+  `);
+  assert.deepEqual(output(source), ['1', '0', '7']);
 });

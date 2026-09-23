@@ -31,7 +31,7 @@
       if (!/^[A-Za-z_$][\w$]*$/.test(peek().text)) fail(peek().line, 'Expected an identifier.');
       return take().text;
     };
-    function readType() { let type = identifier(); if (accept('[')) { expect(']'); type += '[]'; } return type; }
+    function readType() { let type = identifier(); if (accept('[')) { expect(']'); type += '[]'; if (at('[')) fail(peek().line, 'Multidimensional arrays are not supported.'); } return type; }
     function readModifiers() {
       const flags = new Set();
       while (modifiers.has(peek().text) || at('@')) {
@@ -50,12 +50,22 @@
       const token = take(); let node;
       if (['!', '-', '+', '++', '--'].includes(token.text)) node = {kind:'unary', op:token.text, expr:expression(8), line:token.line};
       else if (token.text === '(') { node = expression(); expect(')'); }
-      else if (token.text === 'new') { const type = identifier(); node = {kind:'new', type, args:argumentsList(), line:token.line}; }
+      else if (token.text === 'new') {
+        const type = identifier();
+        if (accept('[')) {
+          if (accept(']')) {
+            expect('{'); const values = []; if (!at('}')) do { values.push(expression()); } while (accept(',')); expect('}');
+            node = {kind:'arrayLiteral', type, values, line:token.line};
+          } else { const size = expression(); expect(']'); if (at('[')) fail(peek().line, 'Multidimensional arrays are not supported.'); node = {kind:'newArray', type, size, line:token.line}; }
+        }
+        else node = {kind:'new', type, args:argumentsList(), line:token.line};
+      }
       else if (/^(?:\d|"|')/.test(token.text) || ['true', 'false', 'null'].includes(token.text)) node = {kind:'literal', raw:token.text, line:token.line};
       else if (/^[A-Za-z_$][\w$]*$/.test(token.text)) node = {kind:'name', name:token.text, line:token.line};
       else fail(token.line, `Expected an expression, found “${token.text}”.`);
       while (true) {
         if (accept('.')) node = {kind:'member', object:node, name:identifier(), line:token.line};
+        else if (accept('[')) { const index = expression(); expect(']'); node = {kind:'index', object:node, index, line:token.line}; }
         else if (at('(')) node = {kind:'call', target:node, args:argumentsList(), line:token.line};
         else if (at('++') || at('--')) node = {kind:'postfix', op:take().text, expr:node, line:token.line};
         else break;
@@ -68,9 +78,14 @@
     }
     function declaration() {
       const line = peek().line, type = readType(), name = identifier();
-      return {kind:'declare', type, name, init:accept('=') ? expression() : null, line};
+      let init = null;
+      if (accept('=')) {
+        if (accept('{')) { const values = []; if (!at('}')) do { values.push(expression()); } while (accept(',')); expect('}'); init = {kind:'arrayLiteral', values, line}; }
+        else init = expression();
+      }
+      return {kind:'declare', type, name, init, line};
     }
-    const isDeclaration = () => /^[\w$]+$/.test(peek().text) && /^[A-Za-z_$][\w$]*$/.test(peek(1).text);
+    const isDeclaration = () => /^[A-Za-z_$][\w$]*$/.test(peek().text) && (/^[A-Za-z_$][\w$]*$/.test(peek(1).text) || (peek(1).text === '[' && (peek(2).text === ']' || peek(2).text === '[')));
     function statement() {
       const line = peek().line;
       if (accept('{')) {
@@ -81,6 +96,7 @@
       if (accept('for')) {
         expect('('); let init = null;
         if (!at(';')) init = isDeclaration() ? declaration() : {kind:'expr', expr:expression(), line:peek().line};
+        if (accept(':')) { const source = expression(); expect(')'); return {kind:'foreach', init, source, body:statement(), line}; }
         expect(';'); const condition = at(';') ? null : expression(); expect(';');
         const update = at(')') ? null : expression(); expect(')');
         return {kind:'for', init, condition, update, body:statement(), line};
@@ -130,7 +146,8 @@
         if (seen.has(parent)) fail(def.line, 'Inheritance cycle detected.');
         seen.add(parent); parent = classes[parent].parent;
       }
-      const validType = type => ['void', 'String', 'String[]', 'boolean', ...numeric].includes(type) || !!classes[type];
+      const validBase = type => ['void', 'String', 'boolean', ...numeric].includes(type) || !!classes[type];
+      const validType = type => validBase(type) || (type.endsWith('[]') && validBase(type.slice(0, -2)));
       for (const member of [...def.fields, ...def.methods]) {
         if (!validType(member.type)) fail(member.line, `Unknown type ${member.type}.`);
         for (const param of member.params || []) if (!validType(param.type)) fail(member.line, `Unknown parameter type ${param.type}.`);
@@ -155,21 +172,29 @@
   }
 
   function simulate(source) {
-    const {classes, main} = compile(source), events = [], objects = {}, stack = [], consoleLines = [];
+    const {classes, main} = compile(source), events = [], objects = {}, arrays = {}, stack = [], consoleLines = [];
     let nextId = 1, ticks = 0;
     const value = (type, data) => ({type, data});
     const primitive = type => numeric.includes(type) || type === 'boolean';
+    const isArray = type => type.endsWith('[]');
+    const component = type => type.slice(0, -2);
     const defaultValue = type => value(type, numeric.includes(type) ? 0 : type === 'boolean' ? false : null);
     const expose = v => v.data?.ref ? {ref:v.data.ref, type:v.type} : v.type === 'char' ? String.fromCharCode(v.data) : v.data;
     const current = () => stack[stack.length - 1];
     const guard = line => { if (++ticks > 10000 || events.length >= 2000) fail(line, 'Execution limit reached (2,000 steps / 10,000 operations). Check for an infinite loop or use fewer iterations.'); };
-    function snapshot(kind, line, title, text, changed = null) {
+    function snapshot(kind, line, title, text, changed = null, changedIndex = null) {
       guard(line);
-      events.push({kind, line, title, text, changed, stack:stack.map(f => ({name:f.name, vars:Object.fromEntries(f.scopes.flatMap(scope => [...scope].map(([name, v]) => [name, expose(v)])))})), objects:structuredClone(Object.fromEntries(Object.entries(objects).map(([id, obj]) => [id, {id:obj.id, className:obj.className, fields:Object.fromEntries(Object.entries(obj.fields).map(([name, v]) => [name, expose(v)]))}]))), console:[...consoleLines]});
+      events.push({kind, line, title, text, changed, changedIndex, stack:stack.map(f => ({name:f.name, vars:Object.fromEntries(f.scopes.flatMap(scope => [...scope].map(([name, v]) => [name, expose(v)])))})), objects:structuredClone(Object.fromEntries(Object.entries(objects).map(([id, obj]) => [id, {id:obj.id, className:obj.className, fields:Object.fromEntries(Object.entries(obj.fields).map(([name, v]) => [name, expose(v)]))}]))), arrays:structuredClone(Object.fromEntries(Object.entries(arrays).map(([id, a]) => [id, {id:a.id, type:a.type, length:a.values.length, values:a.values.map(expose)}]))), console:[...consoleLines]});
     }
     function assignable(from, to) {
       if (from === to) return true;
       if (from === 'null') return !primitive(to) && to !== 'void';
+      if (isArray(from) || isArray(to)) {
+        if (!isArray(from) || !isArray(to)) return false;
+        const fromComponent = component(from), toComponent = component(to);
+        if (primitive(fromComponent) || primitive(toComponent)) return from === to;
+        return fromComponent === toComponent || assignable(fromComponent, toComponent);
+      }
       if (numeric.includes(from) && numeric.includes(to)) return to !== 'char' && numeric.indexOf(from) <= numeric.indexOf(to);
       for (let def = classes[from]; def; def = classes[def.parent]) if (def.name === to) return true;
       return false;
@@ -198,19 +223,27 @@
       }
       if (node.kind === 'member') {
         const ref = evaluate(node.object);
+        if (isArray(ref.type) && node.name === 'length') fail(node.line, 'Array length is read-only.');
         if (!ref.data?.ref) fail(node.line, `Cannot access ${node.name} on a null or non-object value.`);
         const obj = objects[ref.data.ref];
         if (!chain(ref.type).some(def => def.fields.some(field => field.name === node.name))) fail(node.line, `Field ${node.name} was not found on ${ref.type}.`);
         return {get:() => obj.fields[node.name], set:v => { obj.fields[node.name] = v; }, name:node.name, id:obj.id};
       }
+      if (node.kind === 'index') {
+        const ref = evaluate(node.object), index = evaluate(node.index);
+        if (!isArray(ref.type) || !ref.data?.ref) fail(node.line, 'Cannot index a null or non-array value.');
+        if (index.type !== 'int' || !Number.isInteger(index.data)) fail(node.line, 'Array index must be an integer.');
+        const array = arrays[ref.data.ref]; if (index.data < 0 || index.data >= array.values.length) fail(node.line, `Array index ${index.data} is out of bounds.`);
+        return {get:() => array.values[index.data], set:v => { array.values[index.data] = v; }, name:`${ref.data.ref}[${index.data}]`, id:ref.data.ref, index:index.data};
+      }
       fail(node.line, `Unknown variable or assignment target ${node.name || node.kind}.`);
     }
     function write(target, v, line) {
       const converted = convert(v, target.get().type, line); target.set(converted);
-      snapshot(target.id ? 'mutate' : 'assign', line, target.id ? 'Object state changed' : 'Local variable updated', `${target.name} is now ${display(converted)}.`, target.id || null);
+      snapshot(target.id ? 'mutate' : 'assign', line, target.id ? 'Heap state changed' : 'Local variable updated', `${target.name} is now ${display(converted)}.`, target.id || null, target.index ?? null);
       return converted;
     }
-    const display = v => v.data?.ref ? `${objects[v.data.ref].className} #${v.data.ref}` : String(expose(v));
+    const display = v => v.data?.ref ? `${isArray(v.type) ? v.type : objects[v.data.ref].className} #${v.data.ref}` : String(expose(v));
     const bool = (v, line) => { if (v.type !== 'boolean') fail(line, 'A condition must be boolean.'); return v.data; };
     function binary(op, a, b, line) {
       if (op === '+' && (a.type === 'String' || b.type === 'String')) return value('String', display(a) + display(b));
@@ -244,7 +277,12 @@
             return value(classes[f.owner].parent, {ref:f.self});
           }
           return slot(node).get();
-        case 'member': return slot(node).get();
+        case 'member': {
+          const ref = evaluate(node.object);
+          if (isArray(ref.type) && node.name === 'length') return value('int', arrays[ref.data.ref]?.values.length ?? fail(node.line, 'Cannot access length on null.'));
+          return slot(node).get();
+        }
+        case 'index': return slot(node).get();
         case 'new': {
           if (!classes[node.type]) fail(node.line, `Class ${node.type} was not found.`);
           const args = node.args.map(evaluate), id = nextId++, fields = {};
@@ -252,6 +290,20 @@
           objects[id] = {id, className:node.type, fields};
           snapshot('create', node.line, 'Object created', `A new ${node.type} object gets identity #${id}, including inherited fields.`, id);
           construct(node.type, id, args, node.line); return value(node.type, {ref:id});
+        }
+        case 'newArray': {
+          const size = evaluate(node.size);
+          if (size.type !== 'int' || !Number.isInteger(size.data) || size.data < 0) fail(node.line, 'Array size must be a non-negative integer.');
+          if (size.data > 1000 || Object.values(arrays).reduce((n, a) => n + a.values.length, 0) + size.data > 10000) fail(node.line, 'Array allocation limit reached.');
+          const type = `${node.type}[]`, id = nextId++, values = Array.from({length:size.data}, () => defaultValue(node.type));
+          arrays[id] = {id, type, values}; snapshot('create', node.line, 'Array created', `A new ${type} array gets identity #${id} and length ${size.data}.`, id); return value(type, {ref:id});
+        }
+        case 'arrayLiteral': {
+          const declared = node.type ? `${node.type}[]` : null;
+          const values = node.values.map(evaluate);
+          const type = declared || (values.length ? `${values[0].type}[]` : 'int[]');
+          const checked = values.map(v => convert(v, component(type), node.line));
+          const id = nextId++; arrays[id] = {id, type, values:checked}; snapshot('create', node.line, 'Array created', `An array literal gets identity #${id} and length ${values.length}.`, id); return value(type, {ref:id});
         }
         case 'assign': {
           const target = slot(node.left), before = target.get(), right = evaluate(node.right);
@@ -358,7 +410,8 @@
         }
         case 'declare': {
           if (f.scopes.some(scope => scope.has(node.name))) fail(node.line, `Local ${node.name} is already declared.`);
-          if (!primitive(node.type) && node.type !== 'String' && !classes[node.type]) fail(node.line, `Unsupported local type ${node.type}.`);
+          if (!primitive(node.type) && node.type !== 'String' && !classes[node.type] && !isArray(node.type)) fail(node.line, `Unsupported local type ${node.type}.`);
+          if (node.init?.kind === 'arrayLiteral' && !node.init.type) node.init.type = component(node.type);
           const v = node.init ? convert(evaluate(node.init), node.type, node.line) : defaultValue(node.type);
           f.scopes[f.scopes.length - 1].set(node.name, v);
           snapshot(v.data?.ref ? 'reference' : 'assign', node.line, 'Local variable declared', `${node.name} (${node.type}) stores ${display(v)}.`, v.data?.ref || null); return;
@@ -373,6 +426,29 @@
           const condition = bool(evaluate(node.condition), node.line);
           snapshot('condition', node.line, 'Condition checked', `The condition is ${condition}.`);
           return condition ? execute(node.body, loopDepth) : node.otherwise ? execute(node.otherwise, loopDepth) : undefined;
+        }
+        case 'foreach': {
+          const source = evaluate(node.source);
+          if (!isArray(source.type)) fail(node.line, 'Enhanced for-each requires an array source.');
+          if (!source.data?.ref) fail(node.line, 'Cannot iterate over a null array.');
+          if (node.init.kind !== 'declare') fail(node.line, 'Enhanced for-each needs a declared loop variable.');
+          const frameScope = new Map(); f.scopes.push(frameScope);
+          try {
+            const declaration = node.init;
+            if (!assignable(component(source.type), declaration.type)) fail(node.line, `Cannot bind ${source.type} elements to ${declaration.type}.`);
+            frameScope.set(declaration.name, defaultValue(declaration.type));
+            const array = arrays[source.data.ref];
+            for (let index = 0; index < array.values.length; index++) {
+              frameScope.set(declaration.name, convert(array.values[index], declaration.type, node.line));
+              snapshot('iteration', node.line, 'For-each element bound', `Element ${index} of ${source.type} #${source.data.ref} is copied into ${declaration.name}.`, source.data.ref, index);
+              const result = execute(node.body, loopDepth + 1);
+              if (result?.kind === 'return') return result;
+              if (result?.kind === 'break') break;
+              if (result?.kind === 'continue') continue;
+            }
+            snapshot('loop', node.line, 'For-each loop completed', `Finished visiting ${array.values.length} element${array.values.length === 1 ? '' : 's'}.`, source.data.ref);
+          } finally { f.scopes.pop(); }
+          return;
         }
         case 'for': case 'while': case 'do': {
           f.scopes.push(new Map());
@@ -398,7 +474,8 @@
         default: fail(node.line, `Unsupported statement ${node.kind}.`);
       }
     }
-    pushFrame(main, null, [value('String[]', null)]);
+    const argsId = 'args'; arrays[argsId] = {id:argsId, type:'String[]', values:[]};
+    pushFrame(main, null, [value('String[]', {ref:argsId})]);
     snapshot('start', main.line, 'Program started', 'Java creates the main stack frame.');
     const result = execute(main.body);
     if (result && (result.kind !== 'return' || result.value.type !== 'void')) fail(result.line, 'main must return without a value.');

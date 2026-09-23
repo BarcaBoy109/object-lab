@@ -1,5 +1,39 @@
 const examples = {
   blank: '',
+  arrays: `class Main {
+    public static void main(String[] args) {
+        int[] values = {1, 2, 3};
+        values[1] = 7;
+        System.out.println(values.length);
+        System.out.println(values[1]);
+    }
+}`,
+  arrayFor: `class Main {
+    public static void main(String[] args) {
+        int[] values = {1, 2, 3, 4};
+        int total = 0;
+        for (int value : values) {
+            total += value;
+        }
+        System.out.println(total);
+    }
+}`,
+  arrayAlias: `class Main {
+    public static void main(String[] args) {
+        int[] original = {1, 2};
+        int[] alias = original;
+        alias[0] = 9;
+        System.out.println(original[0]);
+    }
+}`,
+  polymorphicArrays: `class Animal { void speak() { System.out.println("animal"); } }
+class Dog extends Animal { @Override void speak() { System.out.println("dog"); } }
+class Main {
+    public static void main(String[] args) {
+        Animal[] pets = new Dog[]{new Dog()};
+        for (Animal pet : pets) { pet.speak(); }
+    }
+}`,
   inheritance: `class Animal {
     String name;
 
@@ -214,7 +248,7 @@ function syncScroll() {
 
 const { simulate } = ObjectLabInterpreter;
 
-function formatValue(v, sourceId='') { if(v && typeof v==='object' && v.ref) return `<span class="ref-value" id="${sourceId}" data-ref="${v.ref}" title="Reference to object #${v.ref}"><span class="ref-dot"></span>${escapeHtml(v.type)} #${v.ref}</span>`; return escapeHtml(v===null?'null':typeof v==='string'?`"${v}"`:v); }
+function formatValue(v, sourceId='') { if(v && typeof v==='object' && v.ref) return `<span class="ref-value" id="${sourceId}" data-ref="${v.ref}" title="Reference to heap entity #${v.ref}"><span class="ref-dot"></span>${escapeHtml(v.type)} #${v.ref}</span>`; return escapeHtml(v===null?'null':typeof v==='string'?`"${v}"`:v); }
 const palette=['#68c7ab','#5c77d8','#e7994a','#9a72ce','#e06d84'];
 function renderState() {
   if (!events.length) return;
@@ -222,7 +256,9 @@ function renderState() {
   $('timeline').value=step;$('timeline').style.setProperty('--progress',events.length>1?`${step/(events.length-1)*100}%`:'0%');
   $('explanationNumber').textContent=step+1;$('explanationLabel').textContent=e.kind.toUpperCase();$('explanationText').textContent=e.text;
   $('stackArea').innerHTML=e.stack.slice().reverse().map((f,i)=>`<div class="stack-frame ${i===0?'active':''}"><div class="frame-title">${escapeHtml(f.name)}<span class="frame-badge">${i===0?'ACTIVE':'CALLER'}<small>ENV ${e.stack.length-i}</small></span></div>${Object.entries(f.vars).length?Object.entries(f.vars).map(([k,v],j)=>`<div class="var-row"><span class="var-name">${escapeHtml(k)}</span><span class="var-value">${formatValue(v,`ref-stack-${i}-${j}`)}</span></div>`).join(''):'<div class="var-row"><span class="var-name">No local variables yet</span></div>'}</div>`).join('');
-  const objs=Object.values(e.objects);$('heapArea').innerHTML=(objs.length?objs.map((o,i)=>`<div class="object-card ${e.changed===o.id?'changed':''}" id="object-${o.id}" style="--object-color:${palette[(o.id-1)%palette.length]}"><div class="object-header"><span>${escapeHtml(o.className)}</span><span class="object-id">OBJECT #${o.id}</span></div><div class="object-body">${Object.entries(o.fields).map(([k,v],j)=>`<div class="field-row"><span class="field-name">${escapeHtml(k)}</span><span class="field-value">${formatValue(v,`ref-field-${o.id}-${j}`)}</span></div>`).join('')}</div></div>`).join(''):'<div class="empty-state compact"><div class="empty-symbol">○</div><p>No objects exist yet.</p></div>');
+  const objs=Object.values(e.objects), arrays=Object.values(e.arrays||{});
+  const heap=[...objs.map((o,i)=>`<div class="object-card ${e.changed===o.id?'changed':''}" id="object-${o.id}" style="--object-color:${palette[(o.id-1)%palette.length]}"><div class="object-header"><span>${escapeHtml(o.className)}</span><span class="object-id">OBJECT #${o.id}</span></div><div class="object-body">${Object.entries(o.fields).map(([k,v],j)=>`<div class="field-row"><span class="field-name">${escapeHtml(k)}</span><span class="field-value">${formatValue(v,`ref-field-${o.id}-${j}`)}</span></div>`).join('')}</div></div>`),...arrays.map(a=>`<div class="object-card array-card ${e.changed===a.id?'changed':''}" id="array-${a.id}" style="--object-color:${palette[(Number(a.id)-1)%palette.length]||'var(--mint)'}"><div class="object-header"><span>${escapeHtml(a.type)} <small>length ${a.length}</small></span><span class="object-id">ARRAY #${a.id}</span></div><div class="object-body array-values">${a.values.map((v,i)=>`<div class="field-row array-element ${e.changed===a.id&&e.changedIndex===i?'element-changed':''}><span class="field-name">[${i}]</span><span class="field-value">${formatValue(v,`ref-array-${a.id}-${i}`)}</span></div>`).join('')}</div></div>`)].join('');
+  $('heapArea').innerHTML=heap||'<div class="empty-state compact"><div class="empty-symbol">○</div><p>No heap entities exist yet.</p></div>';
   $('consoleOutput').innerHTML=e.console.length?e.console.map(x=>`<div class="console-line">${escapeHtml(x)}</div>`).join(''):'<span class="console-muted">Output will appear here…</span>';
   $('storyList').innerHTML=events.map((x,i)=>`<div class="story-item ${i<=step?'reached':''} ${i===step?'active':''}"><button class="story-index" type="button" data-step="${i}" aria-label="Go to step ${i+1}">${i+1}</button><div class="story-copy"><strong>${escapeHtml(x.title)}</strong>${escapeHtml(x.text)}</div></div>`).join('');
   if(!$('storyView').hidden){$('storyList').querySelector('.story-item.active')?.scrollIntoView({behavior:'smooth',block:'center'});}
@@ -251,7 +287,7 @@ function drawReferenceArrows(){
   const base=root.getBoundingClientRect();
   const refs=[...root.querySelectorAll('.ref-value[data-ref]')];
   let defs=`<defs>${palette.map((c,i)=>`<marker id="arrow-${i}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="${c}"/></marker>`).join('')}</defs>`;
-  const paths=refs.map(ref=>{const target=$(`object-${ref.dataset.ref}`);if(!target)return'';const a=ref.getBoundingClientRect(),b=target.getBoundingClientRect();const x1=a.right-base.left,y1=a.top+a.height/2-base.top,x2=b.left-base.left,y2=b.top+Math.min(27,b.height/2)-base.top;const bend=Math.max(28,Math.abs(x2-x1)*.45),d=`M ${x1} ${y1} C ${x1+bend} ${y1}, ${x2-bend} ${y2}, ${x2-5} ${y2}`;const color=palette[(Number(ref.dataset.ref)-1)%palette.length];return `<path class="memory-arrow-halo" d="${d}"/><path class="memory-arrow" d="${d}" stroke="${color}" marker-end="url(#arrow-${(Number(ref.dataset.ref)-1)%palette.length})"/>`}).join('');
+  const paths=refs.map(ref=>{const target=$(`object-${ref.dataset.ref}`)||$(`array-${ref.dataset.ref}`);if(!target)return'';const a=ref.getBoundingClientRect(),b=target.getBoundingClientRect();const x1=a.right-base.left,y1=a.top+a.height/2-base.top,x2=b.left-base.left,y2=b.top+Math.min(27,b.height/2)-base.top;const bend=Math.max(28,Math.abs(x2-x1)*.45),d=`M ${x1} ${y1} C ${x1+bend} ${y1}, ${x2-bend} ${y2}, ${x2-5} ${y2}`;const color=palette[(Number(ref.dataset.ref)-1)%palette.length];return `<path class="memory-arrow-halo" d="${d}"/><path class="memory-arrow" d="${d}" stroke="${color}" marker-end="url(#arrow-${(Number(ref.dataset.ref)-1)%palette.length})"/>`}).join('');
   svg.setAttribute('viewBox',`0 0 ${base.width} ${base.height}`);svg.innerHTML=defs+paths;
 }
 function clearExecution(label='READY',message='Choose an example or write code, then press Visualize.'){

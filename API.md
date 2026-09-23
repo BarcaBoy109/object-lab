@@ -56,6 +56,8 @@ for (const event of events) {
 }
 ```
 
+Array-aware events additionally include an `arrays` map. Each record contains an array `id`, component `type`, `length`, and snapshot `values`; identities are stable across the timeline and earlier snapshots are immutable. `changed` identifies the affected heap entity, and `changedIndex` identifies an affected or visited array element when applicable.
+
 ### `ObjectLab.visualize(source)`
 
 Convenience method returning `{ classes, main, events }`, combining `compile` and `simulate` in one result.
