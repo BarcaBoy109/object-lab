@@ -276,7 +276,14 @@ document.querySelector('.editor-wrap').addEventListener('wheel',e=>{
 $('runBtn').onclick=visualize;$('resetBtn').onclick=()=>setExample($('exampleSelect').value);$('exampleSelect').onchange=e=>setExample(e.target.value);$('prevBtn').onclick=prev;$('nextBtn').onclick=next;$('playBtn').onclick=play;$('timeline').oninput=e=>{stop();step=Number(e.target.value);renderState()};$('speedSelect').onchange=()=>{if(timer){stop();play()}};$('clearConsoleBtn').onclick=()=>$('consoleOutput').innerHTML='<span class="console-muted">Console cleared.</span>';
 $('themeBtn').onclick=()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
 $('storyList').addEventListener('click',e=>{const button=e.target.closest('.story-index');if(!button)return;stop();step=Number(button.dataset.step);renderState()});
-document.querySelectorAll('.view-tab').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.view-tab').forEach(b=>b.classList.toggle('active',b===btn));$('memoryView').hidden=btn.dataset.view!=='memory';$('storyView').hidden=btn.dataset.view!=='story'});
+document.querySelectorAll('.view-tab').forEach(btn=>btn.onclick=()=>{
+  const showMemory=btn.dataset.view==='memory';
+  document.querySelectorAll('.view-tab').forEach(b=>b.classList.toggle('active',b===btn));
+  $('memoryView').hidden=!showMemory;
+  $('storyView').hidden=showMemory;
+  if(showMemory)requestAnimationFrame(drawReferenceArrows);
+  else $('memoryArrows').innerHTML='';
+});
 $('shortcutsBtn').onclick=()=>$('shortcutsDialog').showModal();$('closeDialog').onclick=()=>$('shortcutsDialog').close();
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();run()}else if(document.activeElement!==editor&&e.key==='ArrowRight')next();else if(document.activeElement!==editor&&e.key==='ArrowLeft')prev();else if(document.activeElement!==editor&&e.code==='Space'){e.preventDefault();play()}});
 window.addEventListener('resize',()=>requestAnimationFrame(drawReferenceArrows));$('stackArea').addEventListener('scroll',drawReferenceArrows);$('heapArea').addEventListener('scroll',drawReferenceArrows);
