@@ -294,7 +294,7 @@ document.querySelectorAll('.view-tab').forEach(btn=>btn.onclick=()=>{
   else $('memoryArrows').replaceChildren();
 });
 $('shortcutsBtn').onclick=()=>$('shortcutsDialog').showModal();$('closeDialog').onclick=()=>$('shortcutsDialog').close();
-document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();run()}else if(document.activeElement!==editor&&e.key==='ArrowRight')next();else if(document.activeElement!==editor&&e.key==='ArrowLeft')prev();else if(document.activeElement!==editor&&e.code==='Space'){e.preventDefault();play()}});
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();document.activeElement?.blur?.();run()}else if(document.activeElement!==editor&&e.key==='ArrowRight')next();else if(document.activeElement!==editor&&e.key==='ArrowLeft')prev();else if(document.activeElement!==editor&&e.code==='Space'){e.preventDefault();play()}});
 window.addEventListener('resize',queueReferenceArrows);$('stackArea').addEventListener('scroll',drawReferenceArrows);$('heapArea').addEventListener('scroll',drawReferenceArrows);
 $('memoryView').addEventListener('animationend',e=>{if(e.target.matches('.stack-frame,.object-card'))drawReferenceArrows()});
 new ResizeObserver(syncScroll).observe(editor);
