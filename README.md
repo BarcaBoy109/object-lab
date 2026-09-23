@@ -14,6 +14,8 @@ Then visit `http://localhost:8000`.
 
 ## Supported learning subset
 
+One-dimensional arrays of supported primitive types, `String`, and user-defined classes are supported, including declarations, `new Type[size]`, array literals, indexed reads/writes, aliases, and read-only `.length`. Newly allocated elements use Java defaults. Multidimensional arrays and collection APIs are not supported.
+
 - Classes with primitive or `String` fields
 - Constructors, instance methods, and static methods, including returned values
 - Object creation with `new`
@@ -30,10 +32,12 @@ Then visit `http://localhost:8000`.
 - Constructor/method parameters
 - Local/field assignment, compound assignment, `++`/`--`, and string concatenation
 - `System.out.println(...)`
+- One-dimensional arrays of primitive types, `String`, and user-defined classes, including literals, indexed mutation, aliases, and read-only `.length`
+- Enhanced for-each loops over arrays
 
-The example picker includes inheritance/overriding, method/constructor overloads, and loops. The timeline shows loop conditions and iterations, selected signatures, runtime dispatch, constructor frames, and state changes.
+The example picker includes inheritance/overriding, method/constructor overloads, loops, array mutation, array aliasing, for-each summation, and polymorphic object arrays. The timeline shows loop conditions and iterations, selected signatures, runtime dispatch, constructor frames, array elements, and state changes.
 
-The interpreter is intentionally small and educational. It is not a full Java compiler. Arrays (apart from the entry-point signature), enhanced for-each loops, generics, casts, interfaces, abstract classes, packages, exceptions, varargs, static fields, and field hiding are unsupported. Access control and `final` variable semantics are not enforced. Numbers use JavaScript's numeric storage rather than Java integer overflow/64-bit precision rules. Declare one variable per statement and use braces for loop-local declarations. Unsupported executed expressions report a source-line error rather than being silently skipped.
+The interpreter is intentionally small and educational. It is not a full Java compiler. Multidimensional arrays, collections, `Iterable`, generics, casts, interfaces, abstract classes, packages, exceptions, varargs, static fields, and field hiding are unsupported. No command-line input is supplied; `main` receives an empty `String[] args`. Access control and `final` variable semantics are not enforced. Numbers use JavaScript's numeric storage rather than Java integer overflow/64-bit precision rules. Declare one variable per statement and use braces for loop-local declarations. Unsupported executed expressions report a source-line error rather than being silently skipped.
 
 Execution is capped at 2,000 visualization steps, 10,000 interpreter operations, and 64 call frames to keep infinite loops and recursion from locking the page.
 
@@ -42,7 +46,7 @@ Execution is capped at 2,000 visualization steps, 10,000 interpreter operations,
 With Node.js installed, run the regression suite:
 
 ```powershell
-node --test tests/interpreter.test.js
+node --test tests/interpreter.test.js tests/api.test.js
 ```
 
 ## Use from another project
