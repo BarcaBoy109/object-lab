@@ -227,7 +227,7 @@ function renderState() {
   $('storyList').innerHTML=events.map((x,i)=>`<div class="story-item ${i<=step?'reached':''} ${i===step?'active':''}"><button class="story-index" type="button" data-step="${i}" aria-label="Go to step ${i+1}">${i+1}</button><div class="story-copy"><strong>${escapeHtml(x.title)}</strong>${escapeHtml(x.text)}</div></div>`).join('');
   if(!$('storyView').hidden){$('storyList').querySelector('.story-item.active')?.scrollIntoView({behavior:'smooth',block:'center'});}
   scrollEditorToLine(e.line);
-  $('prevBtn').disabled=step===0;$('nextBtn').disabled=step===events.length-1;requestAnimationFrame(drawReferenceArrows);
+  $('prevBtn').disabled=step===0;$('nextBtn').disabled=step===events.length-1;queueReferenceArrows();
 }
 function scrollEditorToLine(line){
   if(!line)return;
@@ -238,8 +238,17 @@ function scrollEditorToLine(line){
     syncScroll();
   }
 }
+let arrowFrame=0;
+function queueReferenceArrows(){
+  const svg=$('memoryArrows');
+  cancelAnimationFrame(arrowFrame);
+  svg.replaceChildren();
+  arrowFrame=requestAnimationFrame(()=>{arrowFrame=requestAnimationFrame(drawReferenceArrows)});
+}
 function drawReferenceArrows(){
-  const svg=$('memoryArrows'),root=$('memoryView');if(!svg||root.hidden)return;const base=root.getBoundingClientRect();
+  const svg=$('memoryArrows'),root=$('memoryView');
+  if(!svg||root.hidden){svg?.replaceChildren();return}
+  const base=root.getBoundingClientRect();
   const refs=[...root.querySelectorAll('.ref-value[data-ref]')];
   let defs=`<defs>${palette.map((c,i)=>`<marker id="arrow-${i}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="${c}"/></marker>`).join('')}</defs>`;
   const paths=refs.map(ref=>{const target=$(`object-${ref.dataset.ref}`);if(!target)return'';const a=ref.getBoundingClientRect(),b=target.getBoundingClientRect();const x1=a.right-base.left,y1=a.top+a.height/2-base.top,x2=b.left-base.left,y2=b.top+Math.min(27,b.height/2)-base.top;const bend=Math.max(28,Math.abs(x2-x1)*.45),d=`M ${x1} ${y1} C ${x1+bend} ${y1}, ${x2-bend} ${y2}, ${x2-5} ${y2}`;const color=palette[(Number(ref.dataset.ref)-1)%palette.length];return `<path class="memory-arrow-halo" d="${d}"/><path class="memory-arrow" d="${d}" stroke="${color}" marker-end="url(#arrow-${(Number(ref.dataset.ref)-1)%palette.length})"/>`}).join('');
@@ -281,12 +290,13 @@ document.querySelectorAll('.view-tab').forEach(btn=>btn.onclick=()=>{
   document.querySelectorAll('.view-tab').forEach(b=>b.classList.toggle('active',b===btn));
   $('memoryView').hidden=!showMemory;
   $('storyView').hidden=showMemory;
-  if(showMemory)requestAnimationFrame(drawReferenceArrows);
-  else $('memoryArrows').innerHTML='';
+  if(showMemory)queueReferenceArrows();
+  else $('memoryArrows').replaceChildren();
 });
 $('shortcutsBtn').onclick=()=>$('shortcutsDialog').showModal();$('closeDialog').onclick=()=>$('shortcutsDialog').close();
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();run()}else if(document.activeElement!==editor&&e.key==='ArrowRight')next();else if(document.activeElement!==editor&&e.key==='ArrowLeft')prev();else if(document.activeElement!==editor&&e.code==='Space'){e.preventDefault();play()}});
-window.addEventListener('resize',()=>requestAnimationFrame(drawReferenceArrows));$('stackArea').addEventListener('scroll',drawReferenceArrows);$('heapArea').addEventListener('scroll',drawReferenceArrows);
+window.addEventListener('resize',queueReferenceArrows);$('stackArea').addEventListener('scroll',drawReferenceArrows);$('heapArea').addEventListener('scroll',drawReferenceArrows);
+$('memoryView').addEventListener('animationend',e=>{if(e.target.matches('.stack-frame,.object-card'))drawReferenceArrows()});
 new ResizeObserver(syncScroll).observe(editor);
 document.fonts.ready.then(syncScroll);
 setExample('bank');
