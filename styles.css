@@ -34,7 +34,8 @@ button { border: 0; }
 .panel { min-width: 0; background: var(--white); }
 .panel-header { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid var(--line); }
 .file-tab { height: 48px; display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; font-weight: 500; border-bottom: 2px solid var(--coral); }
-.java-badge { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 4px; color: white; background: var(--coral); font-family: var(--sans); font-size: 10px; font-weight: 800; }
+.java-badge { display: grid; place-items: center; width: 18px; height: 18px; }
+.java-badge img { display: block; width: 18px; height: 18px; object-fit: contain; }
 .dirty-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--coral); opacity: 0; }
 .dirty-dot.visible { opacity: 1; }
 select { color: var(--ink); background: #f3f5f8; border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; font-size: 11px; font-weight: 700; outline: none; }
