@@ -54,9 +54,17 @@ node --test tests/interpreter.test.js tests/api.test.js
 The visualizer engine is also available as a small JavaScript API. See [API.md](API.md) for browser and Node.js examples:
 
 ```js
-const ObjectLab = require('./api.js');
+const ObjectLab = require('objectlab');
 const events = ObjectLab.simulate(javaSource);
 console.log(events.at(-1).console);
+```
+
+Install it from npm with `npm install objectlab`. CommonJS and ES module imports
+are supported:
+
+```js
+import { visualize } from 'objectlab';
+const result = visualize(javaSource);
 ```
 
 ## Keyboard shortcuts

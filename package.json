@@ -1,0 +1,37 @@
+{
+  "name": "objectlab",
+  "version": "1.0.0",
+  "description": "A step-by-step Java OOP visualization engine.",
+  "main": "./api.js",
+  "type": "commonjs",
+  "exports": {
+    ".": {
+      "import": "./index.mjs",
+      "require": "./api.js"
+    },
+    "./api": "./api.js",
+    "./interpreter": "./interpreter.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "api.js",
+    "index.mjs",
+    "interpreter.js",
+    "API.md",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "pack:check": "npm pack --dry-run"
+  },
+  "keywords": [
+    "java",
+    "oop",
+    "visualizer",
+    "education"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
