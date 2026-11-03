@@ -72,3 +72,7 @@ const result = visualize(javaSource);
 - `Ctrl + Enter`: visualize
 - `←` / `→`: move between steps
 - `Space`: play or pause
+
+## Sponsors
+
+If ObjectLab helps you, consider [sponsoring BarcaBoy109 on GitHub](https://github.com/sponsors/BarcaBoy109).
